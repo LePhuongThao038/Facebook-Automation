@@ -96,23 +96,41 @@ async function resolveAvatar(profile) {
     else albums.pathname = albums.pathname.replace(/\/$/,'') + '/photos_albums';
     const album = await findAt(albums.href,'albums');
     if (album) {
-      const recent = await findAt(album,'recent') || [];
+      // Only the photo whose CDN identity matches the current avatar counts.
+      // Another photo from the album is a different picture, never a substitute.
       const exact = await findAt(album,'album');
       if (exact && exact !== profile.avatarPage) consider(await readPhoto(exact,thumb));
       if (adequate(current)) { keep({...current,src:currentSrc}); return; }
-      for (const candidate of recent) {
-        if (candidate.page === exact || candidate.page === profile.avatarPage) continue;
-        const image = await readPhoto(candidate.page,candidate.thumbnail);
-        if (!adequate(image)) continue;
-        keep(image);
-        profile.avatarWarning = 'Ảnh thay thế từ album Ảnh đại diện (' + image.w + ' × ' + image.h + ' px).';
-        profile.avatarSource = candidate.page;
-        return;
-      }
     }
     const preview = current;
     keep({...preview,src:currentSrc});
 
     profile.avatarWarning = 'Facebook chỉ hiển thị ảnh xem trước (' + preview.w + ' × ' + preview.h + ' px).';
   } finally { if (tab) await chrome.tabs.remove(tab.id).catch(()=>{}); }
+}
+
+// The profile header shows a cropped cover; its photo page holds the same
+// picture at full size. Accept only that exact photo, original bytes.
+async function resolveCover(profile) {
+  const label = 'Ảnh Cover photo', thumb = profile.media[label]?.[0];
+  if (!thumb) return;
+  let current = {...await avatarPicture(thumb), src:thumb};
+  if (profile.coverPage) {
+    const tab = await chrome.tabs.create({url:profile.coverPage,active:false});
+    try {
+      for (let attempt=0; attempt<15; attempt++) {
+        await sleep(400);
+        const now = await chrome.tabs.get(tab.id);
+        if (now.status !== 'complete') continue;
+        const [entry] = await chrome.scripting.executeScript({target:{tabId:tab.id},func:findAvatarSource,args:['photo',thumb]});
+        if (!entry?.result) continue;
+        const image = {...await avatarPicture(entry.result), src:entry.result};
+        if (image.w*image.h > current.w*current.h) current = image;
+        break;
+      }
+    } finally { await chrome.tabs.remove(tab.id).catch(()=>{}); }
+  }
+  profile.media[label] = [current.src];
+  profile.pics[label] = [current];
+  if (Math.max(current.w,current.h) < 1200) profile.coverWarning = 'Facebook chỉ hiển thị ảnh bìa xem trước (' + current.w + ' × ' + current.h + ' px).';
 }
