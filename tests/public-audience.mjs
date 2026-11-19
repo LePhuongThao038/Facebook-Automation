@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {facebookBot} from '../facebook-bot.js';
+import {facebookAudience} from '../facebook-audience.js';
+import {facebookComment} from '../facebook-comment.js';
+import {friendPage} from '../friend-page.js';
+const {chromium}=createRequire(process.env.USERPROFILE+'/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/package.json')('playwright');
+const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+const url='https://www.facebook.com/permalink.php?story_fbid=123&id=100001';let cases=0;
+async function setup(page,options={}){
+ await page.goto(url);await page.setContent('<main></main>');await page.evaluate(options=>{
+  window.options=options;window.posts=0;window.saves=0;window.permits=0;window.selected=false;
+  const original=Date.now.bind(Date);let tick=0;Date.now=()=>original()+(tick+=1000);const timeout=window.setTimeout.bind(window);window.setTimeout=(fn,delay,...args)=>timeout(fn,Math.min(delay,5),...args);
+  document.documentElement.dataset.facebookDeskJob='job';document.documentElement.dataset.facebookDeskToken='token';
+  const english=options.lang==='en',pub=english?'Public':'Công khai',friends=english?'Friends':'Bạn bè';
+  const root=document.createElement(options.old?'article':'div');root.id='root';if(!options.old)root.setAttribute('role','dialog');
+  root.innerHTML=options.old?'<h2><a href="https://www.facebook.com/profile.php?id='+(options.wrongUID?'100002':'100001')+'">Author</a></h2><a href="'+location.href+'">Just now</a>':'<h2>'+(english?'Create post':'Tạo bài viết')+'</h2><div role="textbox" contenteditable="true">Caption</div>';
+  document.body.append(root);const preview=document.createElement('div');preview.setAttribute('aria-label','Post preview');preview.innerHTML='<span>Author</span>';document.body.append(preview);
+  const audience=document.createElement('button');audience.id='audience';audience.setAttribute('aria-label',options.alreadyPublic?pub:friends);audience.textContent=options.alreadyPublic?pub:friends;
+  audience.onclick=()=>{const dialog=document.createElement('div');dialog.setAttribute('role','dialog');dialog.innerHTML='<h2>'+(english?'Post audience':'Đối tượng của bài viết')+'</h2>';const radio=document.createElement(options.native?'input':'div');if(options.native){radio.type='radio';radio.id='public-radio';const label=document.createElement('label');label.htmlFor=radio.id;label.textContent=pub;dialog.append(label);}else{radio.setAttribute('role','radio');radio.setAttribute('aria-label',pub);radio.textContent=pub;}radio.onclick=()=>{window.selected=true;radio.setAttribute('aria-checked','true');};dialog.append(radio);const done=document.createElement('button');done.textContent=english?'Save':'Xong';done.onclick=()=>{if(window.selected&&!options.ignoreSave){audience.textContent=pub;audience.setAttribute('aria-label',pub);window.saves++;}dialog.remove();};dialog.append(done);document.body.append(dialog);};root.append(audience);
+  if(!options.old){const post=document.createElement('button');post.textContent=english?'Post':'Đăng';post.onclick=()=>window.posts++;root.append(post);}
+  window.chrome={runtime:{async sendMessage(message){if(message.type==='bot-permit'||message.type==='audience-final-permit'){window.permits++;if(options.deny)return {ok:false,error:'Stopped'};if(options.changeAfterPermit&&message.type==='bot-permit'){audience.textContent=friends;audience.setAttribute('aria-label',friends);}return {ok:true,data:true};}return {ok:true};}}};
+ },options);
+}
+async function call(page,old,action){return page.evaluate(({source,old,action,url})=>(0,eval)('('+source+')')(action,old?{jobId:'job',token:'token',actorUid:'100001',url}:{jobId:'job',token:'token',actor:{name:'Author',url:'https://www.facebook.com/profile.php?id=100001'},text:'Caption',expectedMedia:[],applied:[],audience:'public'}),{source:(old?facebookAudience:facebookBot).toString(),old,action,url});}
+try{const page=await browser.newPage();await page.route('**/*',route=>route.fulfill({contentType:'text/html',body:'<main></main>'}));
+ for(const lang of ['vi','en'])for(const native of [false,true]){
+  await setup(page,{lang,native});assert.equal((await call(page,false,'audience')).ok,false);assert.equal((await call(page,false,'commit')).ok,false);assert.equal(await page.evaluate(()=>window.posts),0);assert.equal(await page.evaluate(()=>window.saves),0);assert.equal(await page.evaluate(()=>window.selected),false);cases++;
+  await setup(page,{lang,native,alreadyPublic:true});assert.equal((await call(page,false,'audience')).ok,true);assert.equal((await call(page,false,'commit')).ok,true);assert.equal(await page.evaluate(()=>window.posts),1);cases++;
+  await setup(page,{lang,native,old:true});const out=await call(page,true,'public');assert.equal(out.ok,true,JSON.stringify(out));assert.equal(out.state,'public');assert.equal(await page.evaluate(()=>window.saves),1);cases++;
+ }
+ await setup(page,{alreadyPublic:true});assert.equal((await call(page,false,'audience')).ok,true);assert.equal(await page.evaluate(()=>window.saves),0);cases++;
+ await setup(page,{alreadyPublic:true,old:true});assert.equal((await call(page,true,'public')).state,'already_public');assert.equal(await page.evaluate(()=>window.saves),0);cases++;
+ await setup(page,{old:true});await page.evaluate(()=>{document.querySelector('#audience').remove();const span=document.createElement('span');span.innerHTML='<svg role="img" title="Đã chia sẻ với Công khai" width="16" height="16"><title>Đã chia sẻ với Công khai</title></svg>';document.querySelector('#root').append(span);});assert.equal((await call(page,true,'public')).state,'already_public');assert.equal(await page.evaluate(()=>window.saves),0);cases++;
+ await setup(page,{ignoreSave:true});assert.equal((await call(page,false,'audience')).ok,false);assert.equal((await call(page,false,'commit')).ok,false);assert.equal(await page.evaluate(()=>window.posts),0);cases++;
+ await setup(page,{alreadyPublic:true,changeAfterPermit:true});assert.equal((await call(page,false,'audience')).ok,true);assert.equal((await call(page,false,'commit')).ok,false);assert.equal(await page.evaluate(()=>window.posts),0);cases++;
+ await setup(page,{});const noFlag=await page.evaluate(({source})=>(0,eval)('('+source+')')('commit',{jobId:'job',token:'token',text:'Caption',expectedMedia:[],applied:[]}),{source:facebookBot.toString()});assert.equal(noFlag.ok,false);assert.equal(await page.evaluate(()=>window.posts),0);cases++;
+ await setup(page,{alreadyPublic:true});assert.equal((await call(page,false,'audience')).ok,true);await page.evaluate(()=>{document.querySelector('#audience').remove();});assert.equal((await call(page,false,'commit')).ok,false);assert.equal(await page.evaluate(()=>window.posts),0);cases++;
+ await setup(page,{alreadyPublic:true});await page.evaluate(()=>document.querySelector('#audience').setAttribute('aria-label','Bạn bè'));assert.equal((await call(page,false,'audience')).ok,false,'conflicting Public text and Friends label must block');assert.equal(await page.evaluate(()=>window.posts),0);cases++;
+ await setup(page,{old:true,deny:true});assert.equal((await call(page,true,'public')).ok,false);assert.equal(await page.evaluate(()=>window.saves),0);cases++;
+ await setup(page,{old:true,wrongUID:true});assert.equal((await call(page,true,'public')).ok,false);assert.equal(await page.evaluate(()=>window.saves),0);cases++;
+ await page.goto('https://www.facebook.com/profile.php?id=100001');await page.setContent('<button>Edit profile</button><article><h2><a href="https://www.facebook.com/profile.php?id=100001">Me</a></h2><a href="'+url+'">Just now</a></article><article><h2><a href="https://www.facebook.com/profile.php?id=100002">Other</a></h2><a href="https://www.facebook.com/permalink.php?story_fbid=999&id=100002">Time</a><article><h3><a href="https://www.facebook.com/profile.php?id=100001">My reply</a></h3><a href="https://www.facebook.com/permalink.php?story_fbid=999&id=100002&comment_id=3">Comment</a></article></article>');const discovered=await page.evaluate(({source})=>(0,eval)('('+source+')')('discover',{actorUid:'100001',token:'scan',scroll:false}),{source:facebookAudience.toString()});assert.equal(discovered.ok,true);assert.deepEqual(discovered.urls,[url]);cases++;
+ await page.goto(url);await page.setContent('<article><h2><a href="https://www.facebook.com/profile.php?id=100001">Author</a></h2><a href="'+url+'">Time</a><textarea aria-label="Write a comment"></textarea></article>');
+ const commentPayload={job:{id:'public-check',postUrl:url,authorUid:'100001',actorUid:'100002',kind:'comment',text:'Test',requirePublic:true},nonce:'nonce'};
+ const commentAction=action=>page.evaluate(({source,payload,action})=>(0,eval)('('+source+')')(action,payload),{source:facebookComment.toString(),payload:commentPayload,action});
+ assert.equal((await commentAction('prepare')).ok,false,'private/missing audience must block comment');commentPayload.job.requirePublic=false;assert.equal((await commentAction('prepare')).ok,false,'legacy plan flags cannot bypass Public');assert.equal((await commentAction('inspect')).ok,false);cases++;
+ await page.evaluate(()=>document.querySelector('article').insertAdjacentHTML('beforeend','<svg title="Đã chia sẻ với Công khai" width="16" height="16"><title>Đã chia sẻ với Công khai</title></svg>'));
+ assert.equal((await commentAction('prepare')).ok,true);await page.evaluate(()=>document.querySelector('svg').remove());assert.equal((await commentAction('commit')).ok,false,'changed privacy must block send');cases++;
+ for(const mode of ['inspect-only','accept','denied','wrong-target']){
+  await page.goto('https://www.facebook.com/profile.php?id=100002');await page.setContent('<header><h1>Clone B</h1><button id="confirm">Xác nhận</button></header>');await page.evaluate(mode=>{window.accepts=0;window.chrome={runtime:{sendMessage:async()=>mode==='denied'?{ok:false,error:'Stopped'}:{ok:true,data:true}}};document.querySelector('#confirm').onclick=e=>{window.accepts++;e.target.textContent='Bạn bè';};},mode);
+  const out=await page.evaluate(({source,mode})=>(0,eval)('('+source+')')('work',{target:{id:mode==='wrong-target'?'100003':'100002'},warm:'none',token:'token',acceptIncoming:mode!=='inspect-only'}),{source:friendPage.toString(),mode});
+  if(mode==='accept'){assert.equal(out.relation,'friends');assert.equal(await page.evaluate(()=>window.accepts),1);}else{assert.equal(await page.evaluate(()=>window.accepts),0);if(mode==='inspect-only')assert.equal(out.relation,'incoming');else assert.ok(out.error);}cases++;
+ }
+ console.log(`PASS ${cases} public-audience/comment/friend browser cases: VI/EN, Public-only new posts, Friends/unknown blocked without edits, legacy flag bypass blocked, SVG audience, public-before-comment and changed privacy, internal incoming acceptance, stop permit and wrong UID; no actual Facebook requests`);
+}finally{await browser.close();}

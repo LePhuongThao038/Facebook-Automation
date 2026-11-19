@@ -1,0 +1,357 @@
+{
+  "format": "facebook-desk/3",
+  "encoding": "UTF-8 with BOM",
+  "delimiter": ",",
+  "headerSyntax": "Vietnamese label | stable_field_key",
+  "rowIdentity": {
+    "typeField": "record_type",
+    "postType": "post",
+    "idField": "post_id",
+    "profileType": "profile"
+  },
+  "publishedPolicy": {
+    "success": "auto-confirm published",
+    "unknown": "auto-confirm published by user authorization",
+    "partial": "published; never re-post"
+  },
+  "captionStates": {
+    "present": "source/current caption exists",
+    "no_caption": "media-only observed through three stable reads",
+    "unreadable": "caption not established; do not auto-post",
+    "empty_after_cleanup": "original caption retained; hashtags removed from posting caption"
+  },
+  "integrity": {
+    "algorithm": "SHA-256",
+    "textEncoding": "UTF-8",
+    "normalization": "none",
+    "primary": "caption",
+    "backup": "caption_backup",
+    "source": "source_caption",
+    "checksums": [
+      "caption_sha256",
+      "source_caption_sha256"
+    ]
+  },
+  "columns": [
+    {
+      "key": "row_number",
+      "label": "STT",
+      "indexZeroBased": 0,
+      "excelColumn": "A",
+      "header": "STT | row_number"
+    },
+    {
+      "key": "caption",
+      "label": "Nội dung đăng",
+      "indexZeroBased": 1,
+      "excelColumn": "B",
+      "header": "Nội dung đăng | caption"
+    },
+    {
+      "key": "caption_label",
+      "label": "Tình trạng caption",
+      "indexZeroBased": 2,
+      "excelColumn": "C",
+      "header": "Tình trạng caption | caption_label"
+    },
+    {
+      "key": "status_label",
+      "label": "Tiến độ bài",
+      "indexZeroBased": 3,
+      "excelColumn": "D",
+      "header": "Tiến độ bài | status_label"
+    },
+    {
+      "key": "last_error",
+      "label": "Lỗi gần nhất",
+      "indexZeroBased": 4,
+      "excelColumn": "E",
+      "header": "Lỗi gần nhất | last_error"
+    },
+    {
+      "key": "published_label",
+      "label": "Đã đăng?",
+      "indexZeroBased": 5,
+      "excelColumn": "F",
+      "header": "Đã đăng? | published_label"
+    },
+    {
+      "key": "post_url",
+      "label": "Link bài đã đăng",
+      "indexZeroBased": 6,
+      "excelColumn": "G",
+      "header": "Link bài đã đăng | post_url"
+    },
+    {
+      "key": "source_post_url",
+      "label": "Bài Facebook nguồn",
+      "indexZeroBased": 7,
+      "excelColumn": "H",
+      "header": "Bài Facebook nguồn | source_post_url"
+    },
+    {
+      "key": "scheduled_label",
+      "label": "Giờ dự kiến (VN)",
+      "indexZeroBased": 8,
+      "excelColumn": "I",
+      "header": "Giờ dự kiến (VN) | scheduled_label"
+    },
+    {
+      "key": "image_count",
+      "label": "Số ảnh",
+      "indexZeroBased": 9,
+      "excelColumn": "J",
+      "header": "Số ảnh | image_count"
+    },
+    {
+      "key": "video_count",
+      "label": "Số video",
+      "indexZeroBased": 10,
+      "excelColumn": "K",
+      "header": "Số video | video_count"
+    },
+    {
+      "key": "comment_count",
+      "label": "Số bình luận",
+      "indexZeroBased": 11,
+      "excelColumn": "L",
+      "header": "Số bình luận | comment_count"
+    },
+    {
+      "key": "actor_uid",
+      "label": "UID đăng bài",
+      "indexZeroBased": 12,
+      "excelColumn": "M",
+      "header": "UID đăng bài | actor_uid"
+    },
+    {
+      "key": "source_caption",
+      "label": "Caption gốc",
+      "indexZeroBased": 13,
+      "excelColumn": "N",
+      "header": "Caption gốc | source_caption"
+    },
+    {
+      "key": "source_caption_label",
+      "label": "Caption nguồn",
+      "indexZeroBased": 14,
+      "excelColumn": "O",
+      "header": "Caption nguồn | source_caption_label"
+    },
+    {
+      "key": "import_action",
+      "label": "Xử lý khi nhập",
+      "indexZeroBased": 15,
+      "excelColumn": "P",
+      "header": "Xử lý khi nhập | import_action"
+    },
+    {
+      "key": "post_id",
+      "label": "Mã bài",
+      "indexZeroBased": 16,
+      "excelColumn": "Q",
+      "header": "Mã bài | post_id"
+    },
+    {
+      "key": "source_key",
+      "label": "Mã nguồn Docs",
+      "indexZeroBased": 17,
+      "excelColumn": "R",
+      "header": "Mã nguồn Docs | source_key"
+    },
+    {
+      "key": "source_url",
+      "label": "Link Docs",
+      "indexZeroBased": 18,
+      "excelColumn": "S",
+      "header": "Link Docs | source_url"
+    },
+    {
+      "key": "post_number",
+      "label": "Số bài trong Docs",
+      "indexZeroBased": 19,
+      "excelColumn": "T",
+      "header": "Số bài trong Docs | post_number"
+    },
+    {
+      "key": "status",
+      "label": "Mã trạng thái",
+      "indexZeroBased": 20,
+      "excelColumn": "U",
+      "header": "Mã trạng thái | status"
+    },
+    {
+      "key": "restored_from_status",
+      "label": "Trạng thái trước khi khôi phục",
+      "indexZeroBased": 21,
+      "excelColumn": "V",
+      "header": "Trạng thái trước khi khôi phục | restored_from_status"
+    },
+    {
+      "key": "caption_state",
+      "label": "Mã caption",
+      "indexZeroBased": 22,
+      "excelColumn": "W",
+      "header": "Mã caption | caption_state"
+    },
+    {
+      "key": "source_caption_state",
+      "label": "Mã caption nguồn",
+      "indexZeroBased": 23,
+      "excelColumn": "X",
+      "header": "Mã caption nguồn | source_caption_state"
+    },
+    {
+      "key": "caption_partial",
+      "label": "Caption chưa đủ?",
+      "indexZeroBased": 24,
+      "excelColumn": "Y",
+      "header": "Caption chưa đủ? | caption_partial"
+    },
+    {
+      "key": "caption_evidence",
+      "label": "Căn cứ đọc caption",
+      "indexZeroBased": 25,
+      "excelColumn": "Z",
+      "header": "Căn cứ đọc caption | caption_evidence"
+    },
+    {
+      "key": "caption_backup",
+      "label": "Bản dự phòng nội dung",
+      "indexZeroBased": 26,
+      "excelColumn": "AA",
+      "header": "Bản dự phòng nội dung | caption_backup"
+    },
+    {
+      "key": "caption_sha256",
+      "label": "Mã kiểm tra nội dung",
+      "indexZeroBased": 27,
+      "excelColumn": "AB",
+      "header": "Mã kiểm tra nội dung | caption_sha256"
+    },
+    {
+      "key": "source_caption_sha256",
+      "label": "Mã kiểm tra caption gốc",
+      "indexZeroBased": 28,
+      "excelColumn": "AC",
+      "header": "Mã kiểm tra caption gốc | source_caption_sha256"
+    },
+    {
+      "key": "media_json",
+      "label": "Dữ liệu media (JSON)",
+      "indexZeroBased": 29,
+      "excelColumn": "AD",
+      "header": "Dữ liệu media (JSON) | media_json"
+    },
+    {
+      "key": "comments_json",
+      "label": "Dữ liệu bình luận (JSON)",
+      "indexZeroBased": 30,
+      "excelColumn": "AE",
+      "header": "Dữ liệu bình luận (JSON) | comments_json"
+    },
+    {
+      "key": "location",
+      "label": "Địa điểm",
+      "indexZeroBased": 31,
+      "excelColumn": "AF",
+      "header": "Địa điểm | location"
+    },
+    {
+      "key": "feeling",
+      "label": "Cảm xúc",
+      "indexZeroBased": 32,
+      "excelColumn": "AG",
+      "header": "Cảm xúc | feeling"
+    },
+    {
+      "key": "with_people",
+      "label": "Gắn thẻ",
+      "indexZeroBased": 33,
+      "excelColumn": "AH",
+      "header": "Gắn thẻ | with_people"
+    },
+    {
+      "key": "scheduled_at",
+      "label": "Giờ dự kiến (ISO)",
+      "indexZeroBased": 34,
+      "excelColumn": "AI",
+      "header": "Giờ dự kiến (ISO) | scheduled_at"
+    },
+    {
+      "key": "published_at",
+      "label": "Giờ gửi (ISO)",
+      "indexZeroBased": 35,
+      "excelColumn": "AJ",
+      "header": "Giờ gửi (ISO) | published_at"
+    },
+    {
+      "key": "api_mode",
+      "label": "Chế độ AI",
+      "indexZeroBased": 36,
+      "excelColumn": "AK",
+      "header": "Chế độ AI | api_mode"
+    },
+    {
+      "key": "api_model",
+      "label": "Model",
+      "indexZeroBased": 37,
+      "excelColumn": "AL",
+      "header": "Model | api_model"
+    },
+    {
+      "key": "api_key",
+      "label": "API key (bản sao riêng)",
+      "indexZeroBased": 38,
+      "excelColumn": "AM",
+      "header": "API key (bản sao riêng) | api_key"
+    },
+    {
+      "key": "actor_url",
+      "label": "Link tài khoản",
+      "indexZeroBased": 39,
+      "excelColumn": "AN",
+      "header": "Link tài khoản | actor_url"
+    },
+    {
+      "key": "actor_name",
+      "label": "Tên tài khoản",
+      "indexZeroBased": 40,
+      "excelColumn": "AO",
+      "header": "Tên tài khoản | actor_name"
+    },
+    {
+      "key": "target_url",
+      "label": "Nơi đăng",
+      "indexZeroBased": 41,
+      "excelColumn": "AP",
+      "header": "Nơi đăng | target_url"
+    },
+    {
+      "key": "interval_minutes",
+      "label": "Khoảng cách (phút)",
+      "indexZeroBased": 42,
+      "excelColumn": "AQ",
+      "header": "Khoảng cách (phút) | interval_minutes"
+    },
+    {
+      "key": "record_type",
+      "label": "Loại dòng",
+      "indexZeroBased": 43,
+      "excelColumn": "AR",
+      "header": "Loại dòng | record_type"
+    },
+    {
+      "key": "format_version",
+      "label": "Phiên bản dữ liệu",
+      "indexZeroBased": 44,
+      "excelColumn": "AS",
+      "header": "Phiên bản dữ liệu | format_version"
+    }
+  ],
+  "optionalProviderFields": {
+    "api_protocol": "gemini | compatible | anthropic; absent = gemini",
+    "api_base_url": "HTTPS API base URL; absent = legacy Gemini",
+    "api_json_mode": "1 or 0; absent = 0"
+  }
+}

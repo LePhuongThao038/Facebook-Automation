@@ -1,0 +1,16 @@
+# Dữ liệu thật và cấu hình riêng của máy
+DANH-BA-TU-SHEET.json
+VAI-VE-TU-SHEET.json
+CROSS-COMMENT-*.json
+COMMENT-THU-*.json
+DOI-CHIEU-*.json
+CHECKLIST-*.csv
+media-native-host.json
+media-bridge-config.json
+*.exe
+*.csv
+tests/fixtures/
+work/
+outputs/
+__pycache__/
+node_modules/

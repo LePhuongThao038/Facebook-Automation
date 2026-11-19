@@ -1,0 +1,9 @@
+// Local, read-only diagnostics. Never opens Facebook, starts a queue, or changes UID guards.
+export async function checkConnections({send,fetchHealth,timeoutMs=5000}){
+ async function bounded(task){let timer;try{return await Promise.race([Promise.resolve().then(task),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Kết nối không phản hồi trong '+Math.round(timeoutMs/1000)+' giây.')),timeoutMs);})]);}finally{clearTimeout(timer);}}
+ const checks=[
+  ['csv',async()=>{const r=await send('autosave-location');if(!r?.ok||!r.data?.ok||typeof r.data.path!=='string'||!r.data.path.trim())throw Error(r?.error||r?.data?.error||'Bộ nối chưa trả đường dẫn thư mục.');return {detail:r.data.path,note:'Bộ nối đã trả lời. Trạng thái ghi CSV gần nhất xem tại mục Tự lưu tiến trình & CSV.'};}],
+  ['video',async()=>{const response=await fetchHealth();if(!response.ok)throw Error(response.status===403?'ID tiện ích chưa được Media Bridge cho phép.':'Media Bridge trả HTTP '+response.status+'.');const data=await response.json();if(data.schema!=='desk.media/1'||!Number.isFinite(data.maxMB)||data.maxMB<=0)throw Error('Bộ xử lý video trả thông tin không đúng định dạng.');return {detail:'Media Bridge đang trả lời · tối đa '+data.maxMB+' MB',note:'Chưa kiểm tra một video cụ thể hoặc khả năng đăng lên Facebook.'};}]
+ ];
+ return Promise.all(checks.map(async([id,run])=>{try{return {id,ok:true,...await bounded(run)};}catch(error){let detail=error.message;if(id==='csv'&&/native|forbidden|host|registered/i.test(detail))detail='Bộ nối Windows chưa được cài hoặc chưa ghép quyền với ID tiện ích này.';if(id==='video'&&/failed to fetch|network|fetch failed/i.test(detail))detail='Media Bridge chưa chạy hoặc chưa kết nối được.';return {id,ok:false,detail,note:id==='csv'?'Có thể tải CSV dự phòng ngay trong mục Tự lưu tiến trình & CSV.':'Mở Cài đặt → Start Video; nút này dùng bộ nối Windows để mở trình xử lý.'};}}));
+}

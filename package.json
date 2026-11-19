@@ -1,0 +1,1 @@
+{"private":true,"type":"module","engines":{"node":">=20"},"scripts":{"test:review":"node --test tests/comment-review.mjs","test:source":"node tests/cross-comments.mjs"}}

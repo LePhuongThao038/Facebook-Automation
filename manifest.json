@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Facebook Desk K-Global",
+  "version": "3.8.6.0",
+  "description": "Quản lý nội dung, lịch đăng và bản nháp duyệt thủ công. Kết nối Gemini, Claude và API tương thích OpenAI.",
+  "minimum_chrome_version": "110",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "scripting",
+    "clipboardWrite",
+    "webNavigation",
+    "unlimitedStorage",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://docs.google.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://gemini.google.com/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*",
+    "http://127.0.0.1:47833/*",
+    "http://127.0.0.1:47834/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Mở Facebook Desk K-Global"
+  },
+  "icons": {
+    "128": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "tab-gesture.js",
+        "restriction.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "version_name": "3.8.6 · Tự đăng (cơ chế post mới)"
+}

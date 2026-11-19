@@ -1,0 +1,110 @@
+import {vietnamTime} from './display-time.js';
+let runEnabled=false;
+const state={deskV2:{},friendDesk1:{},deskPersonas:{},deskComments:{}};
+function cardStatus(panel,running,error){
+ const button=document.querySelector('.desk-overview [data-panel="'+panel+'"]');
+ button.dataset.status=running?'running':error?'error':'idle';
+ button.title=running?'Đang xử lý':error?'Có lỗi cần kiểm tra':'Chưa có lượt đang chạy';
+}
+function render(){
+ const desk=state.deskV2||{},friends=state.friendDesk1||{};
+ const posts=desk.posts||[],latest=new Map();
+ for(const job of desk.bot?.jobs||[])if(latest.get(job.postId)!=='success')latest.set(job.postId,job.state);
+ const stages=posts.map(p=>p.state==='success'?'success':latest.get(p.id)||p.state);
+ const count=(items,values)=>items.filter(value=>values.includes(value)).length;
+ const active=count(stages,['running','verifying']);
+ const pending=count(stages,['queued']);
+ const postState=active?'Đang đăng':pending?(desk.bot?.enabled?'Đã xếp lịch':'Tạm dừng'):'Không có lượt đang chạy';
+ document.querySelector('#summary-post').textContent=postState+' · '+count(stages,['success'])+' đã đăng · '+pending+' chờ · '+count(stages,['unknown','partial'])+' đối soát · '+count(stages,['error','failed'])+' lỗi';
+ const rows=(friends.rows||[]).filter(r=>r.campaign===friends.campaign&&r.actor?.url===friends.actor?.url);
+ const busy=active>0||Boolean(friends.active);
+ const pet=document.querySelector('.desk-pet');
+ pet.dataset.mode=runEnabled?(busy?'run':'ready'):'sleep';
+ const sprite=document.getElementById('rex-sprite');
+ const asset='rex-'+pet.dataset.mode+'.gif';
+ if(sprite.getAttribute('src')!==asset)sprite.src=asset;
+ cardStatus('scenario',runEnabled&&active>0,count(stages,['error','failed','ai_error','partial'])>0);
+ cardStatus('friends',runEnabled&&Boolean(friends.active),Boolean(friends.syncError||friends.actorRetryAt||rows.some(r=>r.error)));
+ cardStatus('comments',runEnabled&&Boolean(state.deskComments?.enabled),Boolean(state.deskComments?.last?.includes('uncertain')));
+ document.querySelector('#pet-status').textContent=runEnabled?(busy?'Đang xử lý':'Đã bật · chờ lượt'):'Đang dừng';
+ const queued=rows.filter(r=>r.state==='queued');
+ const retryTimes=queued.map(r=>r.retryAt||0);
+ const earliest=queued.length?Math.max(friends.actorRetryAt||0,friends.next||0,Math.min(...retryTimes)):0;
+ const stage=friends.active||friends.scan||friends.actorRetryAt>Date.now()?friends.stage:friends.pausedByUser?'Đã dừng':friends.enabled?'Chờ đến lượt':queued.length?'Tạm dừng':rows.length?'Hoàn tất':'Chưa chạy';
+ document.querySelector('#summary-friend').textContent=(stage||'Đang chạy')+' · '+(rows.length-queued.length)+'/'+rows.length+' đã xử lý · '+rows.filter(r=>r.sentAt&&['sent','accepted'].includes(r.state)).length+' đã gửi'+(friends.enabled&&earliest>Date.now()?' · Lượt tiếp '+vietnamTime(earliest):'');
+ const withComments=posts.filter(p=>Array.isArray(p.comments)&&p.comments.length);
+ document.querySelector('#summary-comment').textContent=withComments.reduce((sum,p)=>sum+p.comments.length,0)+' dòng kịch bản · '+withComments.length+' bài · Chưa có job gửi';
+}
+for(const button of document.querySelectorAll('.desk-overview [data-panel]'))button.onclick=()=>document.getElementById('tab-'+button.dataset.panel).click();
+const keys=Object.keys(state);
+const seen=new Set();
+chrome.storage.onChanged.addListener((changes,area)=>{
+ if(area!=='local')return;
+ for(const key of keys)if(changes[key]){seen.add(key);state[key]=changes[key].newValue;}
+ if(keys.some(key=>changes[key]))render();
+});
+const initial=await chrome.storage.local.get(keys);
+for(const key of keys)if(!seen.has(key))state[key]=initial[key];
+render();
+
+const runKey='deskRunControl';
+const runButton=document.getElementById('run-toggle');
+function showRunControl(state){
+ runEnabled=state?.enabled===true;render();
+ const text=runEnabled?'Tự động hóa đang bật · Giãn cách tương tác tối thiểu 1 phút':'Đã tạm dừng · '+(state?.reason||'Chờ bạn bật cho Chrome Profile này');
+ document.getElementById('run-state').textContent=text;
+ runButton.textContent=runEnabled?'Tạm dừng toàn bộ':'Bật lại tự động hóa';
+ runButton.disabled=false;
+}
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[runKey])showRunControl(changes[runKey].newValue);});
+showRunControl((await chrome.storage.local.get(runKey))[runKey]);
+runButton.onclick=async()=>{
+ runButton.disabled=true;
+ try{
+  const result=await chrome.runtime.sendMessage({type:'desk-toggle',enabled:!runEnabled});
+  if(!result?.ok)throw Error(result?.error||'Không đổi được trạng thái.');
+  showRunControl(result.data);
+ }catch(e){document.getElementById('run-state').textContent=e.message;runButton.disabled=false;}
+};
+
+const refreshAccount=document.querySelector('#account-refresh');
+let accountRead=false;
+let initialProbe=true;
+async function readAccount(force=false){
+ if(accountRead||document.hidden)return;
+ accountRead=true;refreshAccount.disabled=true;
+ try{
+  const probe=force||initialProbe;initialProbe=false;
+  const result=await chrome.runtime.sendMessage({type:'header-account',probe});
+  const actor=result?.ok?result.data?.actor:null;
+  if(!probe&&!actor&&refreshAccount.dataset.verified==='yes')return;
+  refreshAccount.dataset.verified=actor?'yes':'no';
+  const cached=state.friendDesk1?.actor||state.deskV2?.bot?.actor;
+  const shown=actor||cached;
+  document.querySelector('#account-label').textContent=actor?'Facebook · lần kiểm tra gần nhất':cached?'Nick đã lưu · chưa xác minh':'Tài khoản Facebook';
+  document.querySelector('#account-name').textContent=shown?.name||'Chưa xác định';
+  const detail=document.querySelector('#account-id');
+  let handle='';try{const url=new URL(shown.url);handle=url.searchParams.get('id')||decodeURIComponent(url.pathname.slice(1));}catch{}
+  detail.textContent=actor?(handle?'ID / '+handle:''):(result?.data?.reason||result?.error||'Bấm ↻ để kiểm tra lại.');
+ }finally{accountRead=false;refreshAccount.disabled=false;}
+}
+const linkAccountButton=document.querySelector('#link-account');
+linkAccountButton.onclick=async()=>{
+ if(accountRead)return;
+ const value=prompt('Dán link trang cá nhân của bạn hoặc UID. Facebook Desk sẽ kiểm tra nick đang đăng nhập trong Chrome Profile này.');
+ if(!value?.trim())return;
+ accountRead=true;refreshAccount.disabled=true;linkAccountButton.disabled=true;
+ try{
+  const r=await chrome.runtime.sendMessage({type:'link-account',value});
+  if(!r?.ok||!r.data?.actor)throw Error(r?.error||'Không xác minh được tài khoản.');
+  const actor=r.data.actor,url=new URL(actor.url);
+  document.querySelector('#account-label').textContent='Facebook · đã xác minh liên kết';
+  document.querySelector('#account-name').textContent=actor.name;
+  document.querySelector('#account-id').textContent='ID / '+(url.searchParams.get('id')||url.pathname.slice(1));
+  refreshAccount.dataset.verified='yes';
+ }catch(e){alert(e.message);}finally{accountRead=false;refreshAccount.disabled=false;linkAccountButton.disabled=false;}
+};
+refreshAccount.onclick=()=>readAccount(true).catch(console.error);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)readAccount().catch(console.error);});
+readAccount().catch(console.error);
+setInterval(()=>readAccount().catch(console.error),30000);

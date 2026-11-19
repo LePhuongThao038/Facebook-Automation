@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {audienceService} from '../audience-service.js';
+const url='https://www.facebook.com/permalink.php?story_fbid=123&id=100001';const data={deskRunControl:{enabled:true},deskV2:{posts:[{id:'p',state:'success',postUrl:url}],bot:{jobs:[{postId:'p',state:'success',actor:{url:'https://www.facebook.com/profile.php?id=100001'}}]}}};
+let uid='100001',tabId=10;const tabs=new Map([[3,{id:3,url}]]);
+globalThis.chrome={runtime:{id:'test',getURL:name=>'chrome-extension://test/'+name},storage:{local:{async get(keys){return Object.fromEntries((typeof keys==='string'?[keys]:keys).map(k=>[k,structuredClone(data[k])]));},async set(values){Object.assign(data,structuredClone(values));}}},tabs:{async get(id){if(!tabs.has(id))throw Error('No tab');return tabs.get(id);},async create(options){const tab={id:++tabId,url:options.url};tabs.set(tab.id,tab);return tab;}},scripting:{async executeScript(){return []}}};
+const service=audienceService({identify:async()=>({url:'https://www.facebook.com/profile.php?id='+uid,name:'Actor'})});const ui={id:'test',url:chrome.runtime.getURL('dashboard.html')};
+await service.handle({type:'audience-start',scanProfile:true},ui);let state=data.deskAudienceHistory;const worker={id:'test',url:chrome.runtime.getURL('audience-runner.html'),tab:{id:state.runnerTabId}};
+const first=await service.handle({type:'audience-next'},worker);assert.equal(first.job.url,url);await service.handle({type:'audience-bind-tab',tabId:3,sessionId:first.sessionId},worker);
+assert.equal(await service.handle({type:'audience-final-permit',jobId:first.job.id,token:first.job.token},{id:'test',url,tab:{id:3}}),true);
+await service.handle({type:'audience-stop'},ui);await assert.rejects(service.handle({type:'audience-final-permit',jobId:first.job.id,token:first.job.token},{id:'test',url,tab:{id:3}}));
+await service.handle({type:'audience-start',scanProfile:true},ui);const resumed=await service.handle({type:'audience-next'},worker);assert.equal(resumed.job.id,first.job.id);assert.notEqual(resumed.sessionId,first.sessionId);assert.notEqual(resumed.job.token,first.job.token);
+assert.equal(await service.handle({type:'audience-stop',sessionId:first.sessionId},worker),false);assert.equal(data.deskAudienceHistory.enabled,true);
+await assert.rejects(service.handle({type:'audience-finished',jobId:first.job.id,token:first.job.token,sessionId:first.sessionId,result:{state:'public'}},worker));
+await service.handle({type:'audience-finished',jobId:resumed.job.id,token:resumed.job.token,sessionId:resumed.sessionId,result:{ok:true,state:'public'}},worker);assert.equal(data.deskAudienceHistory.jobs[0].state,'public');
+await service.handle({type:'audience-discovered',sessionId:resumed.sessionId,urls:[url,url,'https://www.facebook.com/permalink.php?story_fbid=456&id=100001']},worker);assert.equal(data.deskAudienceHistory.jobs.length,2);
+uid='100002';await assert.rejects(service.handle({type:'audience-next'},worker));assert.equal(data.deskAudienceHistory.enabled,false);
+console.log('PASS audience ledger: correct UID, durable queue, stop permit, resume token/session fencing, no duplicate URLs, completed jobs preserved and changed account stops');

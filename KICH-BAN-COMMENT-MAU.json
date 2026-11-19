@@ -1,0 +1,22 @@
+{
+  "schema": "desk.comment-script/1",
+  "id": "kich-ban-mau-001",
+  "postId": "THAY_MA_BAI_TRONG_FB_DESK",
+  "authorId": "sheet-clone-01",
+  "steps": [
+    {
+      "id": "cmt-1",
+      "actorId": "sheet-clone-02",
+      "parentId": "",
+      "delaySeconds": 60,
+      "text": ""
+    },
+    {
+      "id": "reply-1",
+      "actorId": "sheet-clone-01",
+      "parentId": "cmt-1",
+      "delaySeconds": 60,
+      "text": ""
+    }
+  ]
+}

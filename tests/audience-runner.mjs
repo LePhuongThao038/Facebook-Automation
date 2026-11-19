@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+let source=readFileSync('audience-runner.js','utf8').replace(/^import .*;\r?\n/gm,'').replace('setInterval(loop,1000);void loop();','globalThis.runLoop=loop;');
+const url='https://www.facebook.com/permalink.php?story_fbid=123&id=100001',actor={uid:'100001',url:'https://www.facebook.com/profile.php?id=100001'},queue=[{actor,discover:true,sessionId:'s'},{actor,job:{id:'j',url,token:'t'},sessionId:'s'},null],calls=[],tabs=new Map();let id=10;
+const context=vm.createContext({console,document:{getElementById:()=>({textContent:''})},setTimeout:fn=>{fn();},taskSlot:async fn=>fn(),openWorkTab:async options=>{const t={...options,id:++id};tabs.set(t.id,t);return t;},closeWorkTab:async tabId=>tabs.delete(tabId),waitFacebookTab:async()=>{},facebookAudience:()=>{},chrome:{tabs:{get:async id=>tabs.get(id)},runtime:{sendMessage:async message=>{calls.push(message);return {ok:true,data:message.type==='audience-next'?queue.shift():true};}},scripting:{executeScript:async options=>{assert.deepEqual(Object.keys(options.target),['tabId'],'Chrome scripting target must not contain sessionId');return [{result:options.args[0]==='discover'?{ok:true,urls:[url],terminal:true}:{ok:true,state:'public'}}];}}}});
+vm.runInContext(source,context);await context.runLoop();await context.runLoop();await context.runLoop();
+assert.ok(calls.some(c=>c.type==='audience-discovered'&&c.terminal===true&&c.sessionId==='s'));assert.ok(calls.some(c=>c.type==='audience-finished'&&c.result.state==='public'&&c.sessionId==='s'));assert.equal(tabs.size,0);
+console.log('PASS audience runner integration: valid Chrome scripting target, discovery terminal proof, session fencing on RPC, per-post result and owned-tab cleanup');
