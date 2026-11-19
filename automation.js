@@ -71,7 +71,7 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
      if(j.receiptLinks?.length===1)proof={url:j.receiptLinks[0],textMatch:true,authorMatch:true,source:'Thông báo Xem bài viết'};
      else{
       if(short(j))throw Error('Bài ngắn hoặc chỉ có media: chưa có link từ thông báo Facebook. Không tự đăng lại.');
-      if(!lookupTab)lookupTab=await openWorkTab({url:fbUrl(j.actor.url),active:false},'lookup:'+j.id,true);
+      if(!lookupTab)lookupTab=await openWorkTab({url:fbUrl(j.actor.url),active:true},'lookup:'+j.id,true);
       proof=await findPublished(j,lookupTab.id);
      }
     }catch(e){reason=e.message;}

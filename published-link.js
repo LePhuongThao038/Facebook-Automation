@@ -3,84 +3,100 @@ import {canonicalPost} from './automation-model.js';
 import {fbUrl} from './scenario.js';
 import {waitFacebookTab} from './tab-ready.js';
 
-// This function is serialized into a tab. It only expands text and opens a timestamp.
+// This function is serialized into a tab. It only expands text, hovers and opens a timestamp.
+// 3.8.6b: Facebook để href="#" trên mốc thời gian cho tới khi rê chuột/focus vào đó, và link tác giả
+// có thể là profile.php, /people/... hoặc tên rút gọn. Bản cũ chỉ nhận "#?..." hoặc link bài sẵn có,
+// và đòi đúng cả link lẫn tên tác giả, nên bài đã lên vẫn bị ghi "cần đối soát".
 export function inspectPost(request) {
- const clean = value => String(value || '').normalize('NFKC').replace(/[\s\u200b-\u200f\u034f\ufe0e\ufe0f]/gu,'').toLowerCase();
+ const clean = value => String(value || '').normalize('NFKC').replace(/[\s​-‏‪-‮⁦-⁩͏︎️]/gu,'').toLowerCase();
  const person = href => {
-  const url = new URL(href,location.href);
-  const numeric=url.pathname.match(/^\/(?:people\/[^/]+\/)?(\d+)\/?$/);
-  if(numeric)return url.origin+'/id/'+numeric[1];
-  return url.origin + (url.pathname === '/profile.php' ? '/id/' + url.searchParams.get('id') : url.pathname.replace(/\/$/,'').toLowerCase());
+  try{
+   const url = new URL(href,location.href);
+   const numeric=url.pathname.match(/^\/(?:people\/[^/]+\/)?(\d+)\/?$/);
+   if(numeric)return 'id:'+numeric[1];
+   if(url.pathname==='/profile.php')return 'id:'+url.searchParams.get('id');
+   return url.pathname.replace(/\/$/,'').toLowerCase();
+  }catch{return '';}
  };
+ const postLink = href => /\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(href||'');
  const visible = el => el.getClientRects().length > 0;
  const wanted = clean(request.text);
  if (wanted.length<12) return {};
- // Facebook may hide the original card under a dialog after resolving its timestamp.
+ const head = wanted.slice(0,Math.min(55,wanted.length));
+ const actorKey=person(request.actor.url), actorName=clean(request.actor.name);
  const saved=globalThis.__deskCheckedTimestamp;
- const opened=saved?.actor===request.actor.url && saved?.text===wanted && saved?.name===request.actor.name && saved.node;
- if(opened && /\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(opened.href))return {url:opened.href};
+ const opened=saved?.actor===request.actor.url && saved?.text===wanted && saved.node;
+ if(opened && postLink(opened.href) && !opened.href.endsWith('#'))return {url:opened.href};
  const menus = [...document.querySelectorAll('[aria-label]')].filter(el => visible(el) && /^(actions for this post|hành động.*bài viết|tùy chọn.*bài viết)/i.test(el.getAttribute('aria-label')));
- const hits = [];
+ const hits = [];const diag={menus:menus.length,textRoots:0,author:0,stamps:0,hrefs:[]};
  for (const menu of menus) {
   for (let root=menu.parentElement; root && root!==document.body; root=root.parentElement) {
    if (menus.some(other => other!==menu && root.contains(other))) break;
-   const headings = [...root.querySelectorAll('h2 a[href],h3 a[href],h4 a[href],[role="heading"] a[href]')];
-   const author = headings.find(a => person(a.href)===person(request.actor.url) && clean(a.innerText)===clean(request.actor.name));
-   if(wanted.length<8 && ![...root.querySelectorAll('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"],p')].some(el=>clean(el.innerText)===wanted))continue;
-   if (!author || !clean(root.innerText).includes(wanted.slice(0,Math.min(55,wanted.length)))) continue;
+   if (!clean(root.innerText).includes(head)) continue;
+   diag.textRoots++;
+   const message=el=>el.closest('p,[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
+   const links=[...root.querySelectorAll('a[href]')];
+   const headingLinks=[...root.querySelectorAll('h2 a[href],h3 a[href],h4 a[href],[role="heading"] a[href],strong a[href]')];
+   const author = headingLinks.find(a => person(a.href)===actorKey) || headingLinks.find(a => clean(a.innerText)===actorName) || links.find(a=>clean(a.innerText)===actorName&&!message(a));
+   if (!author) break;
+   diag.author++;
    const more = [...root.querySelectorAll('button,[role="button"]')].find(el => /^(see more|xem thêm)$/i.test(el.innerText.trim()));
-   if (more && !more.dataset.deskExpanded && !clean(root.innerText).includes(wanted)){more.dataset.deskExpanded='1';more.click();return {expanding:true};}
+   if (more && !more.dataset.deskExpanded && !clean(root.innerText).includes(wanted)){more.dataset.deskExpanded='1';more.click();return {expanding:true,diag};}
    const clone=root.cloneNode(true);
    for(const img of clone.querySelectorAll('img[alt]')) img.replaceWith(document.createTextNode(img.alt));
-   if (![root.innerText,clone.textContent].some(value=>clean(value).includes(wanted))) continue;
-   const heading=author.closest('h2,h3,h4,[role="heading"]');
-   const stamps=[...root.querySelectorAll('a[href]')].filter(a => visible(a) && (heading.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING) && ((a.compareDocumentPosition(menu)&Node.DOCUMENT_POSITION_FOLLOWING)||/ago|vừa xong|phút|giờ|just now/i.test(a.innerText+' '+(a.getAttribute('aria-label')||''))) && !a.closest('p,[data-ad-preview=message]') && (a.hash.startsWith('#?') || /\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(a.href)));
-   hits.push({stamp:stamps.length===1?stamps[0]:null,root});
+   if (![root.innerText,clone.textContent].some(value=>clean(value).includes(wanted.slice(0,Math.min(300,wanted.length))))) break;
+   const timeish=a=>/ago|vừa xong|phút|giờ|ngày|just now|tháng|lúc|^\s*\d+\s*(?:m|h|d|w|min|hrs?)\s*$/i.test((a.innerText||'')+' '+(a.getAttribute('aria-label')||''))||Boolean(a.querySelector('time,abbr'));
+   const stamps=links.filter(a => a!==author && visible(a) && !message(a) && (author.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING) && ((a.compareDocumentPosition(menu)&Node.DOCUMENT_POSITION_FOLLOWING) || timeish(a)) && (postLink(a.href) || a.getAttribute('href')==='#' || a.hash.startsWith('#?') || timeish(a)) && (/^#/.test(a.getAttribute('href')||'') || person(a.href)!==actorKey));
+   diag.stamps=stamps.length;diag.hrefs=stamps.slice(0,3).map(a=>(a.getAttribute('href')||'').slice(0,80));
+   const ready=stamps.find(a=>postLink(a.href)&&!a.href.endsWith('#'));
+   hits.push({stamp:ready||stamps[0]||null,ready:Boolean(ready),root,stamps});
    break;
   }
  }
  if (!hits.length && request.scroll) window.scrollBy(0, Math.max(500,innerHeight*0.85));
- if (hits.length!==1) return {ambiguous:hits.length>1};
- const {stamp,root}=hits[0];
- const direct= /\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(location.href);
- if(direct && (root.closest('[role="dialog"]') || menus.length===1))return {url:location.href};
- if(!stamp)return {};
- if(!stamp.hash.startsWith('#?') && /\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(stamp.href))return {url:stamp.href};
- if(request.open && !stamp.dataset.deskOpened){
+ if (hits.length>1) return {ambiguous:true,diag};
+ if (!hits.length) return {diag};
+ const {stamp,ready,root,stamps}=hits[0];
+ if(postLink(location.href) && (root.closest('[role="dialog"]') || menus.length===1))return {url:location.href,diag};
+ if(ready)return {url:stamp.href,diag};
+ // Rê chuột/focus để Facebook gắn link thật vào mốc thời gian; lượt đọc sau sẽ lấy được.
+ for(const a of stamps){
+  for(const type of ['pointerover','pointerenter','mouseover','mouseenter','mousemove'])a.dispatchEvent(new (type.startsWith('pointer')?PointerEvent:MouseEvent)(type,{bubbles:true,pointerType:'mouse'}));
+  a.dispatchEvent(new FocusEvent('focusin',{bubbles:true}));try{a.focus({preventScroll:true});}catch{}
+ }
+ // Rê nhiều lần vẫn chưa có link thì mở mốc thời gian (Facebook chuyển sang trang bài).
+ if(request.open && stamp && !stamp.dataset.deskOpened && Number(stamp.dataset.deskHover||0)>=3){
   stamp.dataset.deskOpened='1';
   globalThis.__deskCheckedTimestamp={actor:request.actor.url,name:request.actor.name,text:wanted,node:stamp};
-  stamp.dispatchEvent(new PointerEvent('pointerover',{bubbles:true,pointerType:'mouse'}));
-  stamp.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
-  stamp.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
   if(globalThis.__deskTabGesture)globalThis.__deskTabGesture.actionAt=Date.now();
   stamp.target='_self';
   stamp.click();
-  if(/\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(stamp.href))return {url:stamp.href};
  }
- return {};
+ if(stamp)stamp.dataset.deskHover=String(Number(stamp.dataset.deskHover||0)+1);
+ return {pending:true,diag};
 }
 
 export async function findPublished(job, existingTabId) {
- if(String(job.post.text||'').normalize('NFKC').replace(/[\s\u200b-\u200f\u034f\ufe0e\ufe0f]/gu,'').length<12)throw Error('Chưa nhận được link Xem bài viết. Nội dung ngắn hoặc chỉ có media; không tự đăng lại.');
+ if(String(job.post.text||'').normalize('NFKC').replace(/[\s​-‏͏︎️]/gu,'').length<12)throw Error('Chưa nhận được link Xem bài viết. Nội dung ngắn hoặc chỉ có media; không tự đăng lại.');
  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const url=fbUrl(job.actor.url);
  const tab=Number.isInteger(existingTabId)
-  ? await chrome.tabs.update(existingTabId,{url})
-  : await openWorkTab({url,active:false},'lookup:'+job.id,true);
+  ? await chrome.tabs.update(existingTabId,{url,active:true})
+  : await openWorkTab({url,active:true},'lookup:'+job.id,true);
+ let last={};
  try {
   await waitFacebookTab(tab.id,id=>chrome.tabs.get(id),pause);
-  for(let attempt=0;attempt<Math.min(42,18+4*(job.lookupAttempts||0));attempt++){
+  for(let attempt=0;attempt<Math.min(50,24+4*(job.lookupAttempts||0));attempt++){
    let result;
    try {
-    [ {result} ]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:inspectPost,args:[{actor:job.actor,text:job.post.text,open:true,scroll:attempt>=3 && attempt%2===1}]});
+    [ {result} ]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:inspectPost,args:[{actor:job.actor,text:job.post.text,open:true,scroll:attempt>=4 && attempt%3===1}]});
    } catch { /* Clicking the timestamp can replace the document. */ }
+   if(result?.diag)last=result.diag;
    if(result?.ambiguous)throw Error('Có nhiều bài trùng nội dung trên trang cá nhân.');
    const url=result?.url && canonicalPost(result.url);
    if(url && !(job.prior||[]).includes(url))return {url,textMatch:true,authorMatch:true};
-   await pause(650);
+   await pause(700);
   }
-  throw Error('Chưa tìm được link khớp tác giả và nội dung trên trang cá nhân.');
+  throw Error('Chưa tìm được link khớp tác giả và nội dung trên trang cá nhân. [menu='+(last.menus??'?')+'; khớp chữ='+(last.textRoots??'?')+'; tác giả='+(last.author??'?')+'; mốc giờ='+(last.stamps??'?')+'; href='+(last.hrefs||[]).join(' , ')+']');
  } finally {if(!Number.isInteger(existingTabId))await closeWorkTab(tab.id);}
 }
-
-

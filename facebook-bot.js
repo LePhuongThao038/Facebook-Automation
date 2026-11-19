@@ -435,7 +435,7 @@ export async function facebookBot(action,payload={}){
    }while(permission?.data?.waitMs);
    if(!permission?.ok)throw Error(permission?.error||'Bot đã dừng hoặc lượt đăng đã được sử dụng.');
    const noticeLinks=()=>Array.from(document.querySelectorAll('[role="alert"] a[href],[role="status"] a[href],[aria-live="polite"] a[href],[aria-live="assertive"] a[href]'))
-    .filter(a=>!a.closest('article,[role="article"]')&&/^(view post|see post|view your post|xem bài viết|xem bài viết của bạn)$/i.test(label(a)))
+    .filter(a=>!a.closest('article,[role="article"]')&&/^(view|view post|see post|view your post|xem|xem bài viết|xem bài viết của bạn)$/i.test(label(a)))
     .map(a=>canonical(a.href)).filter(url=>url.startsWith('https://')&&!url.includes('/photo.php?'));
    const before=new Set(noticeLinks());
    const receipt={jobId:payload.jobId,links:new Set()};
@@ -456,7 +456,7 @@ export async function facebookBot(action,payload={}){
   if(action==='verify'){
    const wanted=norm(payload.text);
    const prior=new Set(payload.prior||[]),clicked=new WeakSet();
-   const start=Date.now();while(Date.now()-start<6000){
+   const start=Date.now();while(Date.now()-start<12000){
     const receipt=globalThis.__deskPostReceipt;
     if(receipt?.jobId===payload.jobId){
      const actorId=new URL(payload.actor.url).searchParams.get('id');

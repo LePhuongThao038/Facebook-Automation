@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Facebook Desk K-Global",
-  "version": "3.8.6.0",
+  "version": "3.8.6.1",
   "description": "Quản lý nội dung, lịch đăng và bản nháp duyệt thủ công. Kết nối Gemini, Claude và API tương thích OpenAI.",
   "minimum_chrome_version": "110",
   "permissions": [
@@ -50,5 +50,5 @@
       "run_at": "document_start"
     }
   ],
-  "version_name": "3.8.6 · Tự đăng (cơ chế post mới)"
+  "version_name": "3.8.6.1 · Tự đăng (cơ chế post mới, tìm link)"
 }
