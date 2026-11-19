@@ -115,15 +115,20 @@ export async function facebookBot(action,payload={}){
   });
   const videos=previews.filter(e=>e.tagName==='VIDEO').length;
   // Ảnh bìa của video (img nằm cùng khung với thẻ video) không tính thêm.
-  const images=previews.filter(e=>e.tagName==='IMG'&&!previews.some(v=>v.tagName==='VIDEO'&&v.parentElement&&v.parentElement.parentElement?.contains(e))).length;
-  let extra=0;for(const e of all('span,div',root))if(!e.children.length){const m=(e.innerText||'').trim().match(/^\+\s?(\d{1,3})$/);if(m)extra=Math.max(extra,Number(m[1]));}
+  // 3.8.6.3: Facebook vẽ 1 ảnh 2 lần (nền mờ + ảnh chính, cùng src) nên đếm theo src khác nhau.
+  const imageEls=previews.filter(e=>e.tagName==='IMG'&&!previews.some(v=>v.tagName==='VIDEO'&&v.parentElement&&v.parentElement.parentElement?.contains(e)));
+  const images=new Set(imageEls.map(e=>e.currentSrc||e.src)).size;
+  // "+N" chỉ tính khi nhãn nằm đè lên một ảnh xem trước (tránh "+4" ở chỗ khác trong hộp soạn).
+  const overlaps=(a,b)=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return x.width>0&&x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top;};
+  let extra=0;for(const e of all('span,div',root))if(!e.children.length){const m=(e.innerText||'').trim().match(/^\+\s?(\d{1,3})$/);if(m&&imageEls.some(img=>overlaps(e,img)))extra=Math.max(extra,Number(m[1]));}
   const albumLabel=Math.max(0,...[root,...all('[aria-label]',root)].map(e=>{const m=(e.getAttribute('aria-label')||'').match(/(?:^|\s)(\d{1,3})\s*(?:photos|images|ảnh)(?:\s|$)|^(?:edit all|chỉnh sửa tất cả|sửa tất cả)\s*\(?(\d{1,3})\)?/i);return m?Number(m[1]||m[2]):0;}));
   // Ô cuối mang nhãn "+N" đã nằm trong N (log thật: 5 ô + "+2" = 6 ảnh, 5 ô + "+6" = 10 ảnh).
   const total=Math.max(images+videos+(extra?extra-1:0),albumLabel);
   const loading=Boolean(all('[role="progressbar"]',root).length||/uploading|đang tải lên|processing video|đang xử lý video/i.test(root.innerText));
   const error=all('[role="alert"]',root).some(e=>/failed|error|không thể|lỗi/i.test(e.innerText));
   const wantedImages=expected.filter(t=>t==='image').length,wantedVideos=expected.filter(t=>t==='video').length;
-  const ready=!loading&&!error&&(total===expected.length||(wantedVideos>0&&total>expected.length));
+  // Chỉ tải lên đúng số tệp của bài, nên thấy NHIỀU hơn là do Facebook vẽ trùng; thấy ÍT hơn mới là thiếu.
+  const ready=!loading&&!error&&total>=expected.length&&(expected.length>0||total===0);
   return {ready,count:ready?expected.length:total,images:ready?wantedImages:images,videos:ready?wantedVideos:videos,total,signature:String(total),reason:`cần ${wantedImages} ảnh/${wantedVideos} video; thấy ${images} ảnh/${videos} video${extra?' +'+extra:''}${albumLabel?'; nhãn album '+albumLabel:''}; đang tải=${loading}; lỗi=${error}`};
  };
  const assertMedia=()=>{
@@ -352,7 +357,8 @@ export async function facebookBot(action,payload={}){
    before=new Set(all('img,video',composer()).map(e=>e.currentSrc||e.src).filter(Boolean));globalThis.__deskUploadBaseline=[...before];globalThis.__deskUploadJob=payload.jobId;
    const files=[];for(const f of payload.files){if(f.transferId){const record=globalThis.__deskStagedFiles?.get(f.transferId);if(!record||record.next!==f.chunks||record.size!==f.size)throw Error('Chưa chuyển đủ tệp '+f.name);files.push(new File(record.parts,f.name,{type:f.type}));}else files.push(new File([Uint8Array.from(atob(f.base64),c=>c.charCodeAt(0))],f.name,{type:f.type}));}
    const transfer=()=>{const dt=new DataTransfer();for(const file of files)dt.items.add(file);return dt;};
-   const started=()=>{const s=mediaState(payload.files.map(f=>f.type.split('/')[0]));return s.total>0||/uploading|đang tải lên|processing video|đang xử lý video/i.test(composer()?.innerText||'')||all('[role="progressbar"]',composer()||document).length>0;};
+   // Video: Facebook có thể chỉ hiện thanh tiến trình / "%" / thẻ video chưa có kích thước lúc đầu.
+   const started=()=>{const s=mediaState(payload.files.map(f=>f.type.split('/')[0]));const root=composer();if(root&&[...root.querySelectorAll('img,video')].some(e=>!e.closest('[contenteditable="true"]')&&(e.tagName==='VIDEO'||((e.currentSrc||e.src)&&!before.has(e.currentSrc||e.src)&&e.getBoundingClientRect().width>=48))))return true;if(root&&/\b\d{1,3}\s?%/.test(root.innerText))return true;return s.total>0||/uploading|đang tải lên|processing video|đang xử lý video/i.test(composer()?.innerText||'')||all('[role="progressbar"]',composer()||document).length>0;};
    if(inputs.length){const input=inputs[0];input.files=transfer().files;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));}
    const firstWait=payload.files.some(f=>f.type.startsWith('video/'))?25000:12000;
    let took=await wait(started,firstWait).then(()=>true,()=>false);
@@ -414,6 +420,8 @@ export async function facebookBot(action,payload={}){
    return {ok:true,selected:chosenLabel,id:chosen.id||'',field:type};
   }
   if(action==='check'){
+   // Tab vừa được đưa lên lại có thể cần vài giây để Facebook vẽ lại ảnh xem trước.
+   if((payload.expectedMedia||[]).length)await wait(()=>mediaState(payload.expectedMedia).ready,20000).catch(()=>{});
    assertMedia();checkAudiencePolicy();
    if(!captionMatches())throw Error('Nội dung thay đổi trước khi đăng.');
    await advancePublish();checkAudiencePolicy();await waitPublish();
@@ -426,8 +434,10 @@ export async function facebookBot(action,payload={}){
    let root=composer();for(const entry of payload.applied||[])if(!norm(root.innerText).includes(norm(entry.selected)))throw Error('Thông số chưa được áp dụng: '+entry.selected);
    let b=await waitPublish();
    if(globalThis.__deskSubmitAttempt?.jobId===payload.jobId&&globalThis.__deskSubmitAttempt.token===payload.token)throw Error('Lượt này đã gửi thao tác bấm Đăng; không bấm lần hai.');
-   let permission;
+   let permission;const permitStart=Date.now();
    do{
+    // 3.8.6.3: log thật có lượt kẹt ~2 giờ ở bước này. Quá 5 phút thì dừng TRƯỚC khi bấm (an toàn, tự thử lại).
+    if(Date.now()-permitStart>300000)throw Error('Chờ quyền bấm Đăng quá 5 phút (giãn cách thao tác chưa mở). Chưa bấm Đăng.');
     cancel();const restriction=globalThis.deskRestriction?.();if(restriction)throw Error(restriction);
     if(!captionMatches())throw Error('Ô soạn đã thay đổi trong thời gian chờ.');assertMedia();root=composer();
     b=await waitPublish();

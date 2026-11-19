@@ -28,6 +28,9 @@ MAX_OUTPUT = MAX_MB * 1024 * 1024
 # sau do ban uoc luong <= 200 MB, cuoi cung la ban chua biet dung luong (gioi han
 # cung bang --max-filesize). Khong lay ban lon nhat roi moi loai.
 FORMAT = '/'.join([
+    # 3.8.6.3: ban "hd"/"sd" cua Facebook la MP4 H.264 + AAC co san am thanh (da kiem tra),
+    # Facebook nhan tot khi tai len. Ban DASH thuong la AV1, Facebook co the tu choi.
+    'hd[ext=mp4]', 'sd[ext=mp4]',
     'best[ext=mp4][vcodec!=none][acodec!=none][filesize<=200M]',
     'best[ext=mp4][vcodec!=none][acodec!=none][filesize_approx<=200M]',
     'bestvideo[ext=mp4][filesize<=190M]+bestaudio[ext=m4a][filesize<=10M]',
