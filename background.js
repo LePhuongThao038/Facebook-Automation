@@ -82,11 +82,33 @@ async function restoreVerifiedLinks(){
 async function init(){await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});await chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});await lock(async()=>{const saved=await chrome.storage.local.get(['deskV2','posts']);if(!saved.deskV2){const d=defaults();d.posts=(saved.posts||[]).map(p=>({id:'legacy:'+p.id,sourceKey:'legacy',title:p.title||'Bản nháp cũ',text:p.text,blocks:[{runs:[{text:p.text}]}],media:[],notes:[],comments:[],location:'',feeling:'',withPeople:'',time:p.schedule||'',timing:parseTime(p.schedule||''),state:'draft'}));await write(d);}});await chrome.alarms.create('desk-reminders',{periodInMinutes:1});void friendDesk.tick().catch(console.error);await restoreVerifiedLinks();await remind();if(await allowed())await automation.heartbeat();}
 chrome.alarms.get('desk-reminders').then(a=>a||chrome.alarms.create('desk-reminders',{periodInMinutes:1})).catch(console.error);
 chrome.runtime.onInstalled.addListener(()=>init().catch(console.error));chrome.runtime.onStartup.addListener(()=>init().catch(console.error));chrome.alarms.onAlarm.addListener(a=>{if(a.name==='desk-reminders'){friendDesk.tick().catch(console.error);remind().catch(console.error);allowed().then(on=>on&&automation.heartbeat()).catch(console.error);}});
+// 3.8.6.3: yt-dlp không đọc được link BÀI VIẾT (/posts/, permalink.php, pfbid…) khi không đăng nhập
+// ("Cannot parse data"). Đọc trang bài bằng phiên Facebook của chính profile này, lấy mã video,
+// rồi gửi Media Bridge dạng watch/?v=<mã> (yt-dlp đọc được). Không tìm thấy thì giữ link gốc.
+async function resolveVideoSource(sourceUrl,signal){
+ let u;try{u=new URL(sourceUrl);}catch{return sourceUrl;}
+ if(/^\/(?:reels?|videos)\/[\w.-]+|^\/[\w.-]+\/videos\/\d+|^\/watch\/?$/.test(u.pathname))return sourceUrl;
+ try{
+  const r=await fetch('https://www.facebook.com'+u.pathname+u.search,{credentials:'include',signal:signal||AbortSignal.timeout(30000)});
+  if(!r.ok)return sourceUrl;
+  const html=(await r.text()).slice(0,6*1024*1024);
+  const score=new Map();const add=(id,w)=>score.set(id,(score.get(id)||0)+w);
+  for(const m of html.matchAll(/"video_id":"(\d{6,25})"/g))add(m[1],3);
+  for(const m of html.matchAll(/"videoId":"(\d{6,25})"/g))add(m[1],3);
+  for(const m of html.matchAll(/\\?\/(?:videos|reel)\\?\/(\d{6,25})/g))add(m[1],1);
+  for(const m of html.matchAll(/watch\\?\/\?v=(\d{6,25})/g))add(m[1],1);
+  const ranked=[...score].sort((a,b)=>b[1]-a[1]);
+  // Trang bài có thể kèm video gợi ý: chỉ nhận khi một mã áp đảo (gấp đôi mã đứng thứ hai).
+  if(!ranked.length||(ranked[1]&&ranked[0][1]<2*ranked[1][1]))return sourceUrl;
+  return 'https://www.facebook.com/watch/?v='+ranked[0][0];
+ }catch{return sourceUrl;}
+}
 async function mediaFile(m,index,{signal,owner='manual'}={}){
  let url;try{url=mediaFetchUrl(m?.url);}catch(e){throw Error('Tệp '+(index+1)+': '+e.message);}if(!url)throw Error('Media không có liên kết HTTPS hợp lệ.');
  let r;
  if(m.manifest){
-  const manifest=m.manifest;if(manifest.schema!=='desk.media/1'||!['video','reel'].includes(manifest.kind))throw Error('Media JSON không hợp lệ.');
+  if(m.manifest.schema!=='desk.media/1'||!['video','reel'].includes(m.manifest.kind))throw Error('Media JSON không hợp lệ.');
+  const manifest={...m.manifest,sourceUrl:await resolveVideoSource(m.manifest.sourceUrl,signal)};
   /* [3.6.2-video] begin */await guardVideoSize(manifest,{signal});/* [3.6.2-video] end */
   try{for(let attempt=0;attempt<300;attempt++){
    r=await fetch('http://127.0.0.1:47833/prepare',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema:manifest.schema,kind:manifest.kind,sourceUrl:manifest.sourceUrl}),signal:signal||AbortSignal.timeout(900000)});

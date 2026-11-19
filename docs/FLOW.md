@@ -1,6 +1,6 @@
 # FB Desk: cách hệ thống hoạt động
 
-Tài liệu cho đồng nghiệp mới tiếp nhận. Cập nhật theo bản **3.8.7** (19/11/2026). Thay đổi của 3.8.7: [CHANGELOG-3.8.7.md](../CHANGELOG-3.8.7.md).
+Tài liệu cho đồng nghiệp mới tiếp nhận. Cập nhật theo bản **3.8.7** (19/11/2026), đã gộp 3.8.6.3. Thay đổi của 3.8.7: [CHANGELOG-3.8.7.md](../CHANGELOG-3.8.7.md).
 
 ## 1. Hệ thống này làm gì
 
@@ -107,21 +107,26 @@ Thống kê từ CSV tự lưu của 10 nick trong ngày 19/11.
 | 1 | "Có hộp thoại khác đang che bước đăng" | Bot coi mọi hộp thoại khác (chat Messenger…) là đang che nút Đăng | **Đã sửa (3.8.6)**: chỉ kiểm tra phần tử nằm đúng tại nút Đăng |
 | 2 | "Chưa nhận diện được nick… không thấy nút sửa trang" | Dựa vào nút "Chỉnh sửa trang cá nhân", nút này bị ẩn khi ô soạn mở | **Đã sửa (3.8.6)**: so UID phiên đăng nhập |
 | 3 | "Chưa xác minh đủ media tải xong" dù đủ ảnh | Đòi URL ảnh xem trước không đổi và mỗi ảnh có nút xóa riêng | **Đã sửa (3.8.6)**: đếm ảnh/video xem trước |
-| 4 | Album "cần 6 ảnh, thấy 5 ảnh +2" | Ô cuối có nhãn "+N" đã nằm trong N, bot tính dư 1 | **Đã sửa (3.8.6.2)** |
+| 4 | Album "cần 6 ảnh, thấy 5 ảnh +2", "cần 1 ảnh, thấy 2 ảnh", "cần 4, thấy 5 +4" | Ô "+N" đã nằm trong N; Facebook vẽ mỗi ảnh 2 lần (nền mờ + ảnh chính); "+N" lạc ở chỗ khác bị tính nhầm | **Đã sửa (3.8.6.2–3.8.6.3)**: đếm theo src khác nhau, "+N" phải đè lên ảnh, thấy nhiều hơn số tệp đã tải không còn bị coi là lỗi |
 | 5 | Bài đã lên nhưng mãi "cần đối soát" | Facebook để link dòng giờ đăng là `#` cho tới khi rê chuột (3.8.6.1). Còn một nguyên nhân chính: emoji hiển thị bằng `<img alt>` nên chữ của bài không khớp caption ("khớp chữ=0") | **Đã sửa (3.8.7)**: so khớp bỏ emoji, ghi Đã đăng khi hộp soạn đóng |
-| 11 | Album/video không lên | Bot chuyển tab đi tìm link 12 giây sau khi bấm Đăng, cắt ngang lúc album/video còn đang gửi | **Đã sửa (3.8.7)** |
-| 12 | Caption "Facebook" / "của tác giả" | Post Research lấy chữ giao diện khi không đọc được caption (Reel) | **Đã sửa (3.8.7 + Post Research 0.2.22)** |
-| 13 | Chọn 3 phút nhưng chạy 5–8 phút | Timer tab nền bị Chrome hãm; 3 phút tính tới lúc bắt đầu mở bài; tìm link chặn runner | **Đã sửa (3.8.7)** |
-| 14 | Video AV1 | Facebook phát Reels bằng AV1/VP9 | **Đã sửa (3.8.7)**: Media Bridge chuyển sang H.264 |
+| 13 | Album/video không lên | Bot chuyển tab đi tìm link 12 giây sau khi bấm Đăng, cắt ngang lúc album/video còn đang gửi | **Đã sửa (3.8.7)** |
+| 14 | Caption "Facebook" / "của tác giả" | Post Research lấy chữ giao diện khi không đọc được caption (Reel) | **Đã sửa (3.8.7 + Post Research 0.2.22)** |
+| 15 | Chọn 3 phút nhưng chạy 5–8 phút | Timer tab nền bị Chrome hãm; 3 phút tính tới lúc bắt đầu mở bài; tìm link chặn runner | **Đã sửa (3.8.7)** |
+| 16 | Video AV1 | Facebook phát Reels bằng AV1/VP9 | **Đã sửa (3.8.7)**: Media Bridge chuyển sang H.264 |
 | 6 | "Đã bấm mở bài nhưng chưa nhận diện được ô nhập" | Tab Facebook chạy nền nên Chrome không vẽ giao diện | **Đã sửa (3.8.6)**: tab chạy active, bỏ điều kiện opacity |
 | 7 | "message channel closed…" | Service worker MV3 khởi động lại giữa lượt | **Đã sửa (3.8.6)**: runner tự thử lại |
-| 8 | Dựng MP4: "không tìm được định dạng phù hợp" / "không lấy được video công khai" | Bộ lọc định dạng yt-dlp quá hẹp; video riêng tư hoặc đã xóa | **Sửa một phần (3.8.6)**: thêm định dạng dự phòng. Video riêng tư không xử lý được |
+| 8 | Dựng MP4: "không tìm được định dạng phù hợp" (Reel) | Bản hd/sd của Facebook không ghi codec/dung lượng nên bị bộ lọc loại; bản DASH là AV1 | **Đã sửa (3.8.6.3)**: ưu tiên hd/sd (H.264 + AAC). Đã dựng thử thành công qua Media Bridge |
+| 8b | Dựng MP4: "không lấy được video công khai" (link bài viết /posts/, permalink.php) | yt-dlp không đọc được trang bài viết khi chưa đăng nhập ("Cannot parse data") | **Đã sửa (3.8.6.3)**: extension đọc trang bài bằng phiên đăng nhập của profile, lấy mã video, gửi Bridge dạng watch/?v=. Chưa kiểm chứng trên bài thật. Video riêng tư vẫn không xử lý được |
+| 11 | Lỗi tải media / thấy 0 ảnh / nút Đăng bị khóa, kèm "tab hidden" | Cửa sổ Chrome bị che hoặc thu nhỏ, Chrome ngừng vẽ trang | **Đã sửa (3.8.6.3)**: trước các bước mở, tải media, kiểm tra, bấm Đăng, runner đưa cửa sổ lên (có thể chiếm focus); bước kiểm tra chờ tới 20 giây cho ảnh hiện lại |
+| 12 | Kẹt ở "Chuẩn bị bấm Đăng" hàng giờ | Vòng chờ quyền bấm (giãn cách 60 giây) không có giới hạn | **Đã sửa (3.8.6.3)**: quá 5 phút thì dừng trước khi bấm, tự thử lại |
 | 9 | "Extension chưa được ghép nối với Media Bridge" / "native messaging host is forbidden" | ID extension không có trong danh sách được phép | Thêm ID vào `media-bridge-config.json` và `media-native-host.json`, rồi khởi động lại Media Bridge |
 | 10 | Dashboard chậm, máy lag | Runner hỏi việc 4 lần/giây, đọc lại toàn bộ dữ liệu (có ảnh base64) | **Đã sửa (3.8.6)**: hỏi mỗi 2 giây qua bản tóm tắt nhỏ |
 
 ### Việc còn mở
 
 - 3.8.7 chưa chạy lượt đăng thật nào trên Facebook: cần nghiệm thu ghi nhận Đã đăng, album, video và nhịp 3 phút.
+- Video: Reel đã dựng thử thành công; link bài viết có video chưa kiểm chứng trên bài thật.
+- Bản 3.8.6.3 có thể đưa cửa sổ Chrome lên trước khi đăng, nên khi đang dùng máy có thể bị chiếm focus.
 - Thỉnh thoảng một profile đứng ở trạng thái "Đang xử lý" quá 20 phút, thường do cửa sổ bị thu nhỏ hoặc đang chờ video.
 
 ## 6. Vận hành hằng ngày

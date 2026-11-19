@@ -30,9 +30,14 @@ async function page(options={}){
    const input=document.createElement('input');input.type='file';input.multiple=true;input.accept='image/*,image/heif,video/*';input.style.display='none';root.append(input);
    const addPreviews=files=>{
     const media=root.querySelector('#media');const shown=options.albumShown||files.length;
-    files.slice(0,shown).forEach((f,i)=>{const card=document.createElement('div');card.style.cssText='width:110px;height:110px;position:relative';const img=document.createElement('img');img.src=pic('#'+(3+i)+'8'+(6+i));img.style.cssText='width:110px;height:110px';card.append(img);media.append(card);
+    files.slice(0,shown).forEach((f,i)=>{const card=document.createElement('div');card.style.cssText='width:110px;height:110px;position:relative';const src=pic('#'+(3+i)+'8'+(6+i));
+     // Facebook vẽ ảnh 2 lần: nền mờ phía sau + ảnh chính, cùng src.
+     if(options.blurCopy){const back=document.createElement('img');back.src=src;back.style.cssText='position:absolute;inset:0;width:110px;height:110px;filter:blur(8px)';card.append(back);}
+     const img=document.createElement('img');img.src=src;img.style.cssText='position:absolute;inset:0;width:110px;height:110px';card.append(img);media.append(card);
      if(options.cdnSwap)setTimeout(()=>{img.src=pic('#9'+i+'3');},700);});
-    if(files.length>shown){const more=document.createElement('span');more.textContent='+'+(files.length-shown+1);media.lastChild.append(more);}
+    if(files.length>shown){const more=document.createElement('span');more.textContent='+'+(files.length-shown+1);more.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff;background:rgba(0,0,0,.4)';media.lastChild.append(more);}
+    // "+4" lạc ở chỗ khác trong hộp soạn (không nằm trên ảnh) không được tính.
+    if(options.strayPlus){const stray=document.createElement('span');stray.textContent='+4';root.querySelector('h2').append(stray);}
     const remove=document.createElement('div');remove.setAttribute('role','button');remove.setAttribute('aria-label','Xóa ảnh');media.append(remove);
    };
    if(!options.ignoreChange)input.addEventListener('change',()=>addPreviews([...input.files]));
@@ -66,6 +71,8 @@ try{
  r=await flow({albumShown:4},6);assert.equal(r.up.ok,true,JSON.stringify(r.up));assert.equal(r.clicks,1);results.push('album 6 ảnh hiện 4 ô, ô cuối "+3": đăng');
  r=await flow({albumShown:5},10);assert.equal(r.up.ok,true,JSON.stringify(r.up));assert.equal(r.clicks,1);results.push('album 10 ảnh hiện 5 ô, ô cuối "+6" (đúng log thật): đăng');
  r=await flow({ignoreChange:true},2);assert.equal(r.up.ok,true,JSON.stringify(r.up));assert.equal(r.clicks,1);results.push('ô tải không nhận change: tự chuyển sang kéo-thả, đăng');
+ r=await flow({blurCopy:true},1);assert.equal(r.up.ok,true,JSON.stringify(r.up));assert.equal(r.clicks,1);results.push('1 ảnh vẽ 2 lần (nền mờ + ảnh chính): không báo thừa ảnh, đăng');
+ r=await flow({blurCopy:true,strayPlus:true},4);assert.equal(r.up.ok,true,JSON.stringify(r.up));assert.equal(r.clicks,1);results.push('4 ảnh, vẽ 2 lần, có "+4" lạc chỗ khác: đăng');
  r=await flow({tallGap:900,height:623,width:1034},1);assert.equal(r.check.ok,true,JSON.stringify(r.check));assert.equal(r.clicks,1);results.push('màn hình 1034×623, nút Đăng nằm dưới khung nhìn: tự cuộn, đăng');
  r=await flow({stuckOpacity:true},0);assert.equal(r.opened.ok,true);assert.equal(r.clicks,1);results.push('hộp soạn kẹt opacity 0 (tab nền): vẫn nhận diện');
  r=await flow({coverButton:true},0);assert.equal(r.check.ok,false);assert.equal(r.clicks,0);assert.match(r.check.error,/che/);results.push('hộp thoại thật che nút Đăng: dừng, không bấm ('+r.check.uiDiagnostic.cover+')');
