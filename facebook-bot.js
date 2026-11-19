@@ -118,7 +118,8 @@ export async function facebookBot(action,payload={}){
   const images=previews.filter(e=>e.tagName==='IMG'&&!previews.some(v=>v.tagName==='VIDEO'&&v.parentElement&&v.parentElement.parentElement?.contains(e))).length;
   let extra=0;for(const e of all('span,div',root))if(!e.children.length){const m=(e.innerText||'').trim().match(/^\+\s?(\d{1,3})$/);if(m)extra=Math.max(extra,Number(m[1]));}
   const albumLabel=Math.max(0,...[root,...all('[aria-label]',root)].map(e=>{const m=(e.getAttribute('aria-label')||'').match(/(?:^|\s)(\d{1,3})\s*(?:photos|images|ảnh)(?:\s|$)|^(?:edit all|chỉnh sửa tất cả|sửa tất cả)\s*\(?(\d{1,3})\)?/i);return m?Number(m[1]||m[2]):0;}));
-  const total=Math.max(images+videos+extra,albumLabel);
+  // Ô cuối mang nhãn "+N" đã nằm trong N (log thật: 5 ô + "+2" = 6 ảnh, 5 ô + "+6" = 10 ảnh).
+  const total=Math.max(images+videos+(extra?extra-1:0),albumLabel);
   const loading=Boolean(all('[role="progressbar"]',root).length||/uploading|đang tải lên|processing video|đang xử lý video/i.test(root.innerText));
   const error=all('[role="alert"]',root).some(e=>/failed|error|không thể|lỗi/i.test(e.innerText));
   const wantedImages=expected.filter(t=>t==='image').length,wantedVideos=expected.filter(t=>t==='video').length;
