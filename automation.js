@@ -20,21 +20,9 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
  const job=(d,id)=>{const j=bot(d).jobs.find(j=>j.id===id);if(!j)throw Error('Không tìm thấy lượt chạy.');return j;};
  const active=j=>!terminalStates.includes(j.state)&&j.state!=='queued';
  const runnable=(b,j)=>b.enabled && (!b.cardsOnly || j.cardScheduled);
- function useThreeMinuteSchedule(b,now=Date.now()){
-  if(b.threeMinuteSchedule)return false;
-  b.threeMinuteSchedule=true;
-  b.intervalMinutes=DEFAULT_INTERVAL_MINUTES;
-  const queued=b.jobs.filter(j=>j.state==='queued'&&j.scheduleMode==='default')
-   .sort((a,b)=>Date.parse(a.dueAt)-Date.parse(b.dueAt));
-  if(queued.length){
-   const first=Math.max(now,Date.parse(queued[0].dueAt)||now);
-   queued.forEach((j,index)=>{
-    j.dueAt=new Date(first+index*DEFAULT_GAP_MS).toISOString();
-    j.minGapMs=DEFAULT_GAP_MS;
-   });
-  }
-  return true;
- }
+ // 3.8.7: bỏ cơ chế ép mọi hàng chờ về 3 phút (3.8.6). Giờ bắt đầu và khoảng cách do người dùng quay trên đồng hồ
+ // (bot-enqueue: startAt + intervalMinutes). Giữ tên hàm để các chỗ gọi cũ không đổi lịch người dùng đã chọn.
+ function useThreeMinuteSchedule(){return false;}
  const detectActor=detectAccount;
  let creatingRunner;
  async function ensureRunner(){if(!creatingRunner)creatingRunner=checkRunner().finally(()=>{creatingRunner=null;});return creatingRunner;}
@@ -157,7 +145,8 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
     const replaced=new Map(b.jobs.filter(j=>auto && ids.includes(j.postId) && j.state==='queued' && !['manual','explicit'].includes(j.scheduleMode)).map(j=>[j.postId,j]));
     const keep=b.jobs.filter(j=>!replaced.has(j.postId)||j!==replaced.get(j.postId));
     const staged=[];
-    for(const slot of assignSlots(plan.items,keep,now,gap)){
+    const startAt=msg.startAt?Date.parse(msg.startAt):0;if(msg.startAt&&(!Number.isFinite(startAt)||startAt>now+15*86400000))throw Error('Giờ bắt đầu trên đồng hồ không hợp lệ.');
+    for(const slot of assignSlots(plan.items,keep,now,gap,startAt)){
      const post=posts.find(p=>p.id===slot.id);
      if(msg.resetUnsent&&!resetCandidate(post,b.jobs))throw Error('Tiến độ đã đổi. Mở lại danh sách trước khi xếp lịch.');
      const copy={...(msg.resetUnsent?resetCopy(post):post),time:slot.mode==='explicit'?slot.time:''};
@@ -187,13 +176,13 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
     if(b.jobs.some(j=>!terminalStates.includes(j.state)&&j.actor.url!==actor.url))throw Error('Tài khoản hàng chờ khác tài khoản Facebook hiện tại.');
     const previous=b.jobs.find(j=>j.postId===post.id&&!['failed','cancelled'].includes(j.state));
     if(previous && previous.state!=='queued')throw Error('Bài đang xử lý hoặc đã đăng.');
-    const now=Date.now(), instant=msg.mode==='now';
+    const now=Date.now(), dryRun=msg.mode==='dry', instant=msg.mode==='now'||dryRun;
     const gap=instant?60000:0;
     const last=Math.max(0,...b.jobs.filter(j=>j!==previous && j.scheduleMode==='now' && ['queued','running','verifying'].includes(j.state)).map(j=>Date.parse(j.dueAt)),...b.jobs.map(j=>Date.parse(j.submittedAt)||0));
     const due=instant?Math.max(now,last+gap):Date.parse(msg.dueAt);
     if(!Number.isFinite(due)||(!instant&&due<=now))throw Error('Chọn ngày giờ trong tương lai.');
     const j=previous||createJob({...post,time:''},{target:actor.url},actor,b.jobs);
-    Object.assign(j,{dueAt:new Date(due).toISOString(),backdate:false,requestedTime:null,minGapMs:gap,scheduleMode:instant?'now':'manual',cardScheduled:true});
+    Object.assign(j,{dueAt:new Date(due).toISOString(),backdate:false,requestedTime:null,minGapMs:gap,scheduleMode:instant?'now':'manual',cardScheduled:true,dryRun});
     if(!previous)b.jobs.push(j);
     if(!b.enabled){b.cardsOnly=true;for(const other of b.jobs)if(other!==j)other.cardScheduled=false;}
     b.enabled=true;b.actor=actor;b.plan=null;post.state='queued';
@@ -255,12 +244,14 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
   }
   if(msg.type==='runner-finish')return lock(async()=>{const d=await db(),b=bot(d),j=job(d,msg.jobId);if(msg.token!==j.token||j.runnerTabId!==sender.tab?.id||!active(j))throw Error('Lượt chạy không còn hiệu lực.');let state=msg.result.state;
    // 3.8.6: lỗi xảy ra TRƯỚC khi bấm Đăng (chưa có submittedAt) được tự thử lại 1 lần với tab mới.
-   if(state==='failed'&&!j.submittedAt&&!j.clickDispatchedAt&&!j.receiptLinks?.length&&!j.autoRetried&&b.enabled&&!/Dựng MP|Media Bridge|Media nguồn|vượt|thiếu tệp|caption|Bộ lọc tên|Sai tài khoản|khác nick|khác tài khoản|đăng nhập|kiểm tra tài khoản|Bot đã dừng/i.test(String(msg.result.message||''))){
+   if(state==='failed'&&!j.dryRun&&!j.submittedAt&&!j.clickDispatchedAt&&!j.receiptLinks?.length&&!j.autoRetried&&b.enabled&&!/Dựng MP|Media Bridge|Media nguồn|vượt|thiếu tệp|caption|Bộ lọc tên|Sai tài khoản|khác nick|khác tài khoản|đăng nhập|kiểm tra tài khoản|Bot đã dừng/i.test(String(msg.result.message||''))){
     try{await mediaRelease?.(j.id+':'+j.token);}catch{}
     Object.assign(j,{state:'queued',stage:'retry',autoRetried:true,previousError:String(msg.result.message||'').slice(0,1000),token:crypto.randomUUID(),dueAt:new Date(Date.now()+90000).toISOString(),runnerTabId:null,facebookTabId:null,resumeFacebookTabId:null,resumeDraftText:null,mediaProofId:null,evidence:[],error:''});
     const p=d.posts.find(p=>p.id===j.postId);if(p)p.state='queued';
     event(d,j.post,'queued','Tự thử lại sau lỗi trước khi đăng: '+String(msg.result.message||'').slice(0,300));await write(d);return {state:'queued'};
-   }const url=canonicalPost(msg.result.url);if(!terminalStates.includes(state))throw Error('Trạng thái không hợp lệ.');if(state==='success'&&(!j.submittedAt||(url?(!msg.result.textMatch||!msg.result.authorMatch):msg.result.published!==true)||(j.backdate&&!msg.result.dateVerified)))throw Error('Thiếu bằng chứng đăng thành công.');if(j.submittedAt&&['failed','cancelled'].includes(state))state='unknown';j.postUrl=url;j.verification=msg.result;j.stage='finished';b.lastFinishedAt=Date.now();recordOutcome(d,j,state,String(msg.result.message||'Bot đã đăng và xác minh link.'),b.lastFinishedAt);await write(d);return {state:j.state};});
+   }const url=canonicalPost(msg.result.url);if(!terminalStates.includes(state))throw Error('Trạng thái không hợp lệ.');if(state==='success'&&(!j.submittedAt||(url?(!msg.result.textMatch||!msg.result.authorMatch):msg.result.published!==true)||(j.backdate&&!msg.result.dateVerified)))throw Error('Thiếu bằng chứng đăng thành công.');if(j.submittedAt&&['failed','cancelled'].includes(state))state='unknown';j.postUrl=url;j.verification=msg.result;j.stage='finished';b.lastFinishedAt=Date.now();recordOutcome(d,j,state,String(msg.result.message||'Bot đã đăng và xác minh link.'),b.lastFinishedAt);
+    // 3.8.7: chạy thử không bao giờ bấm Đăng: bài quay lại Chờ chuẩn bị để xếp lịch thật, lưu cấu trúc giao diện (tối đa ~300 KB).
+    if(j.dryRun){if(j.submittedAt)throw Error('Chạy thử không được có lượt bấm Đăng.');const p=d.posts.find(x=>x.id===j.postId);if(p)p.state='draft';const shot=msg.result.uiSnapshot;if(shot&&JSON.stringify(shot).length<300000)j.uiSnapshot=shot;delete j.verification?.uiSnapshot;}await write(d);return {state:j.state};});
   return undefined;
  }
  return {handle,heartbeat,ensureRunner,pause};

@@ -41,7 +41,10 @@ async function execute(j){
   if(j.post.location){await checkpoint('Chọn địa điểm');const result=await action('pick',{field:'location',value:j.post.location});applied.push(result);await checkpoint('Đã chọn địa điểm',{evidence:result});}
   if(j.post.feeling){await checkpoint('Chọn cảm xúc');const result=await action('pick',{field:'feeling',value:j.post.feeling});applied.push(result);await checkpoint('Đã chọn cảm xúc',{evidence:result});}
   for(const person of j.tags){await checkpoint('Gắn thẻ '+person);const result=await action('pick',{field:'people',value:person});applied.push(result);await checkpoint('Đã gắn thẻ',{evidence:result});}
-  await checkpoint('Kiểm tra trước khi đăng');const ready=await action('check',{applied});await checkpoint('Chuẩn bị bấm Đăng',{evidence:{type:'publish-ui',...ready.uiDiagnostic}});await action('commit',{applied});proof.audienceMode='default';submitted=true;
+  await checkpoint('Kiểm tra trước khi đăng');const ready=await action('check',{applied});await checkpoint('Chuẩn bị bấm Đăng',{evidence:{type:'publish-ui',...ready.uiDiagnostic}});
+  // 3.8.7: chạy thử dừng tại đây, KHÔNG bấm Đăng: chụp cấu trúc giao diện rồi bỏ bản nháp.
+  if(j.dryRun){await checkpoint('Chạy thử: chụp cấu trúc giao diện');const shot=await action('snapshot');await checkpoint('Chạy thử: bỏ bản nháp');await action('discard');await rpc('runner-finish',{...auth,result:{state:'cancelled',dryRun:true,url:'',uiSnapshot:shot.snapshot,message:'Chạy thử xong: đã mở ô soạn, điền nội dung, tải '+files.length+' media, Facebook cho phép bấm Đăng. Không bấm Đăng, đã bỏ bản nháp. Có cấu trúc giao diện để tải về.'}});completed=true;status.textContent='Chạy thử xong: '+j.post.title;return;}
+await action('commit',{applied});proof.audienceMode='default';submitted=true;
   // 3.8.7: chờ Facebook đóng hộp soạn (đã nhận bài) TRƯỚC khi đọc link hoặc chuyển trang. Album/video cần
   // thêm thời gian gửi sau khi bấm Đăng; chuyển tab sớm làm bài không lên.
   await checkpoint('Chờ Facebook đăng xong');const hasVideo=files.some(f=>String(f.type||'').startsWith('video/'));

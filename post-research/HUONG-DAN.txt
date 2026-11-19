@@ -1,0 +1,123 @@
+POST RESEARCH 0.2.21 + FACEBOOK DESK 3.5.1
+
+CẬP NHẬT ĐỒNG BỘ HAI BẢN
+Dừng hàng chờ cũ, chờ lượt đang gửi kết thúc và xuất bản sao mới nhất. Cập nhật
+nội dung đúng thư mục mỗi extension đang được Chrome nạp rồi bấm Reload trong
+chrome://extensions. Giữ đường dẫn cũ để giữ dữ liệu và ID; không gỡ bản đang dùng.
+Giữ cấu hình OAuth riêng trong manifest Post Research nếu trước đây đã thêm.
+Bản mới của Post Research có thêm thông tin caption trong Docs, cần FB Desk
+3.5.1 để đọc đúng. Caption đã mất trong tài liệu cũ cần được quét/xuất lại từ nguồn.
+
+1. CAPTION LÀ MỘT NỘI DUNG NGUỒN DUY NHẤT
+Đã sửa bộ đọc nhầm khối bài viết thành khối bình luận và loại luôn caption.
+Đã thêm nhận caption ngắn, chỉ emoji, xuống dòng và chữ nằm trong bài dạng article.
+Caption lấy được trên timeline được giữ nguyên, không cắt còn 14 từ hoặc 900 ký tự
+để làm dữ liệu nguồn. Nếu lượt đọc chi tiết rỗng, dùng lại chữ nguồn đã lấy được.
+Các lượt thử có nhiều bình luận hơn không được làm mất caption đã đọc trước đó.
+Chỉ giữ một bản caption phù hợp, không ghép lặp bản trong tiêu đề với bản nội dung.
+Tên ngắn phục vụ danh sách/tên tệp không được coi là bằng chứng để bịa caption.
+Docs tiếp tục có Phần 1 Bài viết và Phần 2 Bình luận, không xuất tiêu đề bài riêng.
+
+2. PHÂN BIỆT BÀI KHÔNG CAPTION VÀ LỖI CHƯA ĐỌC ĐƯỢC
+present: có caption nguồn. Emoji và câu ngắn như “Hi” cũng được tính là caption.
+no_caption: quan sát bài chỉ có media trong ba lượt đọc ổn định liên tiếp, đã thấy
+tác giả/media, không có dấu hiệu đang tải hoặc yêu cầu đăng nhập và chưa từng lấy
+được caption cho bài đó. Căn cứ kiểm tra được giữ trong dữ liệu xuất.
+unreadable: chưa đủ căn cứ đọc caption hoặc kết luận bài vốn không caption.
+Caption còn “Xem thêm” được gắn partial, không coi đoạn trích là toàn bộ nội dung.
+
+FB Desk giữ các trạng thái này tách khỏi trạng thái bài đã đăng hay chưa.
+Bài no_caption có media được phép xếp đăng với ô caption trống, không lấy nhãn
+“Bài 1” hoặc tên tài khoản để điền vào. Bài unreadable/partial được giữ để đọc lại
+nguồn, tránh tự đăng thiếu chữ. Đây là cơ chế quan sát giao diện; Facebook thay
+giao diện hoặc che nội dung vẫn có thể khiến hệ thống chưa xác định được caption.
+
+3. CSV V3: DỄ ĐỌC CHO NGƯỜI, CÓ KHÓA CỘT CỐ ĐỊNH CHO AGENT
+Bấm “Xuất CSV v3”. Mỗi bài một dòng. Các dòng bài nằm trước; dòng cấu hình riêng
+nằm cuối và được ghi rõ CẤU HÌNH BẢN SAO, không phải bài đăng.
+Các cột đầu ưu tiên đọc trực tiếp:
+STT | Nội dung đăng | Tình trạng caption | Tiến độ bài | Lỗi gần nhất | Đã đăng? |
+Link bài đã đăng | Bài Facebook nguồn | Giờ dự kiến VN | Số ảnh/video/bình luận |
+UID đăng bài | Caption gốc | Trạng thái nguồn | Xử lý khi nhập.
+Các cột sau chứa mã bài, trạng thái máy đọc, dữ liệu media/bình luận JSON, bản dự
+phòng, mã kiểm tra, lịch ISO chính xác và cấu hình. Không có cột tiêu đề riêng.
+
+Mỗi tiêu đề cột có dạng “Tên dễ hiểu | field_key”, ví dụ “Nội dung đăng | caption”.
+Agent tìm field_key sau dấu | cuối cùng, chọn dòng record_type=post, tìm post_id
+cần xử lý rồi lấy ô ở cột tương ứng. Không cần suy đoán theo tên bài hoặc số thứ tự.
+File CSV-V3-SCHEMA.json kèm bộ cài mô tả địa chỉ cột và quy tắc đọc cho agent.
+Nếu sắp xếp/đổi thứ tự cột, agent vẫn tìm bằng field_key và post_id.
+
+CSV là bảng văn bản nên không lưu màu, độ rộng cột hay font như XLSX. Tiêu đề
+tiếng Việt, thứ tự cột và một dòng/mỗi bài giúp đọc được mà không phải mở JSON.
+Khi mở trong Excel, chọn UTF-8 và dấu phẩy nếu chương trình hỏi cách nhập.
+UID được lưu dạng chữ để tránh làm tròn dãy số dài. Caption nhiều dòng/ngoặc kép
+và emoji được đặt trong ô CSV đúng quy tắc, không tách nhầm thành nhiều bài.
+
+4. BẢO TOÀN CAPTION VÀ TỰ PHỤC HỒI
+caption: nội dung hiện chuẩn bị đăng, sau xử lý hashtag/biên tập.
+source_caption: caption nguồn nguyên bản được giữ riêng, kể cả hashtag gốc.
+caption_backup: bản dự phòng chính xác của nội dung chuẩn bị đăng.
+caption_sha256/source_caption_sha256: mã kiểm tra SHA-256 theo UTF-8.
+
+Khi nhập, nếu ô caption hỏng/mất nhưng bản dự phòng còn khớp mã kiểm tra,
+hệ thống tự phục hồi caption trước khi ghi dữ liệu. Nếu nội dung và dự phòng đều
+hỏng, hoặc caption gốc bị thay đổi không khớp, giao dịch nhập bị chặn và báo rõ
+mã bài; không âm thầm biến nó thành bài vốn không có caption.
+Muốn biên tập caption, dùng FB Desk rồi xuất lại CSV để cập nhật cả mã kiểm tra.
+Agent sửa CSV trực tiếp phải cập nhật đúng bản dự phòng và SHA-256 tương ứng.
+Không có cơ chế khôi phục chữ chưa từng được đọc/lưu hoặc đã mất ở tất cả các bản.
+
+5. TỰ NHẬN DIỆN VÀ XÁC NHẬN TIẾN ĐỘ KHI NHẬP
+Với CSV v3 hợp lệ do bản mới xuất, mã bài được mang cùng toàn bộ nội dung/media.
+Nhập vào bản trống cũng tạo lại bản ghi bài để đối chiếu bằng ID, không cần chọn
+từng bài hay đọc Docs trước. Caption giống nhau/trống không gây trùng định danh.
+Theo quyền bạn đã cấp:
+- success/Đã đăng: tự xác nhận đã đăng, không xếp lại.
+- unknown/Cần đối soát: tự xác nhận đã đăng, không hỏi người dùng xác nhận.
+- partial/Đã đăng còn thiếu bước: giữ là đã đăng, không tạo bài mới để thử lại.
+- Các trạng thái chưa đăng được nhận diện và giữ thông tin trạng thái gốc để chạy
+  tiếp. Hàng chờ cũ được thay bằng dữ liệu chờ chuẩn bị, tránh chạy trùng lượt cũ.
+
+Phần Báo cáo lịch sử hiện số tự xác nhận và thống kê trạng thái có trong file.
+Thẻ bài chưa đăng hiển thị trạng thái đã khôi phục và lỗi gần nhất nếu có.
+Bấm Sắp lịch tự động để chạy phần còn lại với lịch/tần suất mong muốn.
+Hộp thoại dùng tiếp API/UID hay thay cấu hình khác vẫn được giữ theo yêu cầu trước;
+đó là chọn cấu hình kết nối, không phải bước xác nhận bài đã đăng bằng tay.
+
+Tự xác nhận ở đây dựa trên mã/trạng thái trong file và quy tắc bạn cho phép, không
+phải một lần truy vấn độc lập để chứng minh bài hiện vẫn tồn tại trên Facebook.
+Vì vậy hãy dừng bản cũ và xuất bản sao cuối cùng trước khi chuyển tiến độ.
+Không để bản cũ tiếp tục đăng sau thời điểm xuất rồi dùng CSV cũ để chạy bản mới.
+
+6. TƯƠNG THÍCH NGƯỢC
+CSV v2 và CSV lịch sử cũ tiếp tục nhập được. File cũ có caption thì giữ lại;
+ô trống không tự được kết luận là nguồn vốn không có caption.
+CSV cũ không chứa caption đầy đủ/mã bài/link thì không thể tái tạo chắc chắn các
+dữ kiện đã thiếu. Các mục ghép duy nhất vẫn tự khôi phục; mục mơ hồ giữ lại để
+đối chiếu nguồn, tránh tự đánh dấu nhầm bài khác. Không cam kết “100% mọi CSV cũ”.
+CSV cũ bạn gửi có 87 dòng, trong đó 5 dòng Cần đối soát thuộc 5 bài khác nhau.
+Các file CSV v3 mới đầy đủ mã bài không cần bước chọn thủ công như file cũ.
+
+7. API KEY, VIDEO VÀ CÁC TÍNH NĂNG GIỮ LẠI
+Lựa chọn xuất kèm API key vẫn có thể bật/tắt. Key trong CSV là văn bản rõ: giữ file
+riêng, không chia sẻ công khai. Khóa nhập chỉ giữ trong phiên Chrome, muốn lưu
+lâu dài thì bật Ghi nhớ key trong Cài đặt AI. UID được kiểm tra với phiên hiện tại.
+Video/Reels tiếp tục dùng Media JSON → Python → MP4 trước upload. Chạy
+Start-Media.cmd trong thư mục FB Desk, ghép Extension ID một lần rồi giữ cửa sổ
+bộ xử lý mở trong phiên. Có thể xem/copy ID và kiểm tra kết nối trong Cài đặt.
+Python 3 và mạng cho lần cài yt-dlp/imageio-ffmpeg đầu tiên là cần thiết.
+Giữ giới hạn 25 MB/tệp, 40 MB tổng/bài; chưa kiểm chứng màn hình tạo Reel riêng.
+Font lớn, ba màu, khủng long, đếm ngược, dừng/sửa/tiếp tục vẫn giữ nguyên.
+Giờ được lưu đến mili giây, nhưng thời điểm Facebook xử lý không được cam kết
+chính xác từng mili giây.
+
+8. KIỂM TRA ĐÃ CHẠY
+Đã dùng bộ quét thật trên các trang Facebook mô phỏng trong Chrome: caption nằm
+trong article, caption ngắn/chỉ emoji, caption timeline trên 900 ký tự, loại comment
+và bài khác, giữ chữ đã đọc khi lượt sau rỗng, nhận diện ba lượt media-only.
+Đã kiểm tra Docs/Word hai phần, caption gốc/caption xử lý, CSV cũ/v2/v3, UID dài,
+caption trùng/trống, tự xác nhận theo ID, phục hồi từ bản dự phòng và chặn file hỏng.
+Đã kiểm tra xuất/tải/nhập CSV v3 trong giao diện Chrome với kết nối mô phỏng,
+không cần chọn bài để xác nhận cho file v3. Các kiểm tra dừng/hàng chờ và cú pháp
+cũng đã chạy. Chưa kiểm chứng trực tiếp trên Facebook thật trong tài khoản của bạn.

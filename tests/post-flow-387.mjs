@@ -73,5 +73,30 @@ try{
    return htmlBlocks(html).map(b=>b.depth||0);});
   assert.deepEqual(depths,[0,1,2,1,0]);await ctx.close();results.push('HTML Docs: margin-left/padding-left 18pt mỗi cấp -> depth 1, 2');
  }
+ {// Chạy thử: chụp cấu trúc (ẩn caption/tên nick) rồi bỏ bản nháp, không bấm Đăng.
+  const ctx=await browser.newContext();await ctx.addCookies([{name:'c_user',value:UID,domain:'.facebook.com',path:'/',secure:true}]);
+  const p=await ctx.newPage();
+  await p.route('**/*',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html lang="vi"><body><main></main></body></html>'}));
+  await p.goto('https://www.facebook.com/profile.php?id='+UID);
+  await p.evaluate(()=>{
+   window.clicks=0;document.documentElement.dataset.facebookDeskJob='job';document.documentElement.dataset.facebookDeskToken='token';
+   const root=document.createElement('div');root.setAttribute('role','dialog');root.setAttribute('aria-label','Tạo bài viết');
+   root.innerHTML='<h2>Tạo bài viết</h2><div role="button" aria-label="Đóng">×</div><a aria-label="Trang cá nhân của Thu Trà Clone">Thu Trà Clone</a><div contenteditable="true" role="textbox" data-lexical-editor="true">Caption bí mật của bài 123456789</div><div role="button" aria-label="Ảnh/video, đã thêm 2">Ảnh/video</div><div role="button" aria-label="Đăng">Đăng</div>';
+   for(let i=0;i<2;i++){const c=document.createElement('canvas');c.width=c.height=120;const img=document.createElement('img');img.src=c.toDataURL();img.style.cssText='width:110px;height:110px';root.append(img);}
+   root.querySelector('[aria-label="Đăng"]').onclick=()=>window.clicks++;
+   root.querySelector('[aria-label="Đóng"]').onclick=()=>{const ask=document.createElement('div');ask.setAttribute('role','dialog');ask.setAttribute('aria-label','Bỏ bài viết?');ask.innerHTML='<div role="button">Tiếp tục chỉnh sửa</div><div role="button">Bỏ</div>';ask.lastChild.onclick=()=>{ask.remove();root.remove();};document.body.append(ask);};
+   document.body.append(root);
+  });
+  const payload={jobId:'job',token:'token',actor:{url:'https://www.facebook.com/profile.php?id='+UID,name:'Thu Trà Clone'},text:'Caption bí mật của bài 123456789',expectedMedia:['image','image']};
+  const shot=await p.evaluate(({fn,payload})=>(0,eval)('('+fn+')')('snapshot',payload),{fn:facebookBot.toString(),payload});
+  assert.equal(shot.ok,true,JSON.stringify(shot));
+  const json=JSON.stringify(shot.snapshot);
+  assert.ok(!/bí mật|Thu Trà|123456789/.test(json),'lộ dữ liệu: '+json.slice(0,400));
+  assert.ok(shot.snapshot.buttons.some(b=>/đã thêm 2/.test(b)));assert.equal(shot.snapshot.media.total,2);
+  const out=await p.evaluate(({fn,payload})=>(0,eval)('('+fn+')')('discard',payload),{fn:facebookBot.toString(),payload});
+  assert.equal(out.ok,true,JSON.stringify(out));assert.equal(await p.evaluate(()=>document.querySelectorAll('[role=dialog]').length),0);
+  assert.equal(await p.evaluate(()=>window.clicks),0);
+  await ctx.close();results.push('chạy thử: chụp cấu trúc không lộ caption/tên/số, bỏ bản nháp qua hộp "Bỏ", không bấm Đăng');
+ }
  console.log('PASS post-flow-387');for(const x of results)console.log(' ✓',x);
 }finally{await browser.close();}

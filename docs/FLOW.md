@@ -29,7 +29,7 @@ flowchart LR
 |---|---|
 | `background.js` | Service worker. Lưu dữ liệu (`chrome.storage.local`, khóa `deskV2`), nhận lệnh, tải media |
 | `automation.js` | Hàng chờ bot: lấy bài đến lượt, cấp quyền bấm Đăng, ghi kết quả, tự thử lại, tìm lại link |
-| `posting-plan.js` | Xếp lịch: mặc định cách nhau 3 phút |
+| `posting-plan.js` | Xếp lịch theo giờ bắt đầu và khoảng cách chọn trên đồng hồ xoay (`schedule-dial.js`, 3.8.7) |
 | `runner.js` | Tab "Bot đang chạy": điều phối từng lượt đăng, mỗi lần một bài |
 | `facebook-bot.js` | Chạy trong tab Facebook: nhận diện nick, mở ô soạn, điền chữ, tải ảnh, kiểm tra, bấm Đăng |
 | `published-link.js` | Sau khi đăng: tìm link bài (permalink) trên trang cá nhân |
@@ -124,7 +124,7 @@ Thống kê từ CSV tự lưu của 10 nick trong ngày 19/11.
 
 ### Việc còn mở
 
-- 3.8.7 chưa chạy lượt đăng thật nào trên Facebook: cần nghiệm thu ghi nhận Đã đăng, album, video và nhịp 3 phút.
+- 3.8.7 chưa chạy lượt đăng thật nào trên Facebook. Dùng nút **Chạy thử** trước, rồi thử 1 bài album + 1 bài video trên nick khỏe đặt "Chỉ mình tôi".
 - Video: Reel đã dựng thử thành công; link bài viết có video chưa kiểm chứng trên bài thật.
 - Bản 3.8.6.3 có thể đưa cửa sổ Chrome lên trước khi đăng, nên khi đang dùng máy có thể bị chiếm focus.
 - Thỉnh thoảng một profile đứng ở trạng thái "Đang xử lý" quá 20 phút, thường do cửa sổ bị thu nhỏ hoặc đang chờ video.

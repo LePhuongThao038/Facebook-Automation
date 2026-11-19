@@ -337,7 +337,7 @@ export async function facebookBot(action,payload={}){
    opener.scrollIntoView({block:'center'});botClick(opener);try{await wait(composer,25000);}catch{const dialogs=all('[role="dialog"],dialog');throw Error('Đã bấm mở bài nhưng chưa nhận diện được ô nhập. Hộp thoại hiện: '+dialogs.length+'; số ô nhập theo hộp: '+dialogs.map(d=>draftEditors(d).length).join(','));}if(editor().innerText.trim())throw Error('Facebook phục hồi bản nháp có sẵn. Bot không ghi đè.');
    document.documentElement.dataset.facebookDeskJob=payload.jobId;document.documentElement.dataset.facebookDeskToken=payload.token;await checkActor();return {ok:true,prior,actor};
   }
-  if(['text','upload','upload-check','pick','check','commit','audience'].includes(action)){cancel();await checkActor();}
+  if(['text','upload','upload-check','pick','check','commit','audience','snapshot'].includes(action)){cancel();await checkActor();}
   if(action==='audience')return await ensurePublicAudience();
   if(action==='text'){if(editor().innerText.trim())throw Error('Ô soạn đã có chữ.');await fillText(editor(),payload.text);return {ok:true};}
   if(action==='upload'||action==='upload-check'){
@@ -466,6 +466,40 @@ export async function facebookBot(action,payload={}){
    catch(error){observer.disconnect();await chrome.runtime.sendMessage({type:'bot-abort-before-click',jobId:payload.jobId,token:payload.token,reason:error.message}).catch(()=>{});throw error;}
    const publicProof=checkAudiencePolicy();globalThis.__deskSubmitAttempt={jobId:payload.jobId,token:payload.token,at:Date.now()};
    b.scrollIntoView({block:'center',inline:'nearest'});botClick(b);collect();void chrome.runtime.sendMessage({type:'bot-clicked',jobId:payload.jobId,token:payload.token}).catch(()=>{});return {ok:true,clicked:true,audienceProof:publicProof,uiDiagnostic:publishDiagnostic()};
+  }
+  // 3.8.7: CHẠY THỬ. Chụp cấu trúc hộp soạn (đã ẩn dữ liệu cá nhân) để dựng bộ test giống Facebook thật,
+  // rồi bỏ bản nháp. Không bao giờ bấm Đăng trong hai thao tác này.
+  if(action==='snapshot'){
+   cancel();const root=composer();if(!root)throw Error('Không thấy hộp soạn để chụp cấu trúc.');
+   const secret=[payload.actor?.name,payload.text,...String(payload.text||'').split(/\n+/)].map(norm).filter(v=>v&&v.length>=3);
+   const scrub=v=>{let t=String(v||'').replace(/\s+/g,' ').trim();if(!t)return '';if(secret.some(x=>norm(t).includes(x)||x.includes(norm(t))&&norm(t).length>=6))return '[nội dung bài]';return t.replace(/\d{6,}/g,'[số]').slice(0,90);};
+   const kind=src=>/^blob:/.test(src)?'blob':/^data:/.test(src)?'data':/fbcdn|scontent/.test(src)?'fbcdn':src?'khác':'';
+   const outline=[];const walk=(el,depth)=>{if(outline.length>=700||depth>40)return;const r=el.getBoundingClientRect();const item={d:depth,t:el.tagName.toLowerCase()};
+    const role=el.getAttribute('role');if(role)item.role=role;const aria=el.getAttribute('aria-label');if(aria)item.aria=scrub(aria);
+    if(el.matches('img,video')){item.w=Math.round(r.width);item.h=Math.round(r.height);item.src=kind(el.currentSrc||el.src||el.poster||'');if(el.tagName==='IMG')item.nat=el.naturalWidth;}
+    if(el.isContentEditable&&el.getAttribute('contenteditable')==='true'){item.editor=true;item.chars=(el.innerText||'').length;outline.push(item);return;}
+    if(el.matches('input[type=file]'))item.accept=el.accept||'';
+    if(!el.children.length){const text=(el.textContent||'').trim();if(text)item.text=scrub(text);}
+    if(el.matches('button,[role=button]'))item.label=scrub(label(el));if(el.closest('[aria-disabled="true"]')===el)item.disabled=true;
+    outline.push(item);for(const c of el.children)if(visible(c)||c.matches('input[type=file]'))walk(c,depth+1);};
+   walk(root,0);
+   const expected=payload.expectedMedia||[];
+   return {ok:true,snapshot:{schema:'desk.ui-snapshot/1',at:new Date().toISOString(),language:document.documentElement.lang||'',viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},visibility:document.visibilityState,expected,media:mediaState(expected),publish:(({status,candidates,cover})=>({status,candidates,cover}))(publishSnapshot(root)),buttons:buttons(root).map(e=>scrub(label(e))).filter(Boolean),nodes:outline.length,outline}};
+  }
+  if(action==='discard'){
+   cancel();let root=composer();if(!root)return {ok:true,discarded:true};
+   const close=buttons(root).filter(e=>/^(?:đóng|close|đóng hộp thoại.*|close (?:the )?(?:composer|dialog).*)$/i.test(label(e)));
+   if(!close.length)throw Error('Không thấy nút Đóng của hộp soạn để bỏ bản nháp.');
+   botClick(close[0]);
+   const leave=/^(?:bỏ|bỏ qua|loại bỏ|discard|leave|rời khỏi|bỏ bài viết|discard post|không lưu|don.t save)$/i;
+   const deadline=Date.now()+15000;
+   while(Date.now()<deadline){
+    await sleep(400);
+    const confirm=all('[role="dialog"],[role="alertdialog"]').flatMap(d=>buttons(d)).find(e=>leave.test(label(e))&&!disabled(e));
+    if(confirm){botClick(confirm);await sleep(600);}
+    if(!composerCandidates().length&&!(globalThis.__deskReviewComposer?.root&&visible(globalThis.__deskReviewComposer.root)))return {ok:true,discarded:true};
+   }
+   throw Error('Chưa bỏ được bản nháp chạy thử; hộp soạn vẫn mở. Hãy tự đóng và chọn Bỏ.');
   }
   // 3.8.7: sau khi bấm Đăng, Facebook giữ hộp soạn ("Đang đăng…") tới khi gửi xong album/video rồi mới đóng.
   // Hộp soạn đóng mà không có báo lỗi = Facebook đã nhận bài. Runner chỉ được rời trang sau bước này:

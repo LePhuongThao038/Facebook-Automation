@@ -2,7 +2,7 @@
 
 Extension Chrome (Manifest V3) dùng để quản lý nội dung từ Google Docs, xếp lịch và tự đăng bài lên trang cá nhân Facebook. Đi kèm có Media Bridge (Python + yt-dlp) để dựng MP4.
 
-Phiên bản hiện tại: **3.8.7**. Hệ thống hoạt động thế nào, các lỗi đã gặp và cách vận hành: xem [docs/FLOW.md](docs/FLOW.md). Danh sách thay đổi: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md), [CHANGELOG-3.8.6.md](CHANGELOG-3.8.6.md).
+Phiên bản hiện tại: **3.8.7**. **Agent/đồng nghiệp: đọc [AGENTS.md](AGENTS.md) trước khi lấy hoặc đẩy mã.** Post Research 0.2.22 nằm trong `post-research/`. Hệ thống hoạt động thế nào, các lỗi đã gặp và cách vận hành: xem [docs/FLOW.md](docs/FLOW.md). Danh sách thay đổi: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md), [CHANGELOG-3.8.6.md](CHANGELOG-3.8.6.md).
 
 ## Cài đặt
 

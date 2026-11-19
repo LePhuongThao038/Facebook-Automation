@@ -26,6 +26,27 @@ Nguồn phân tích: dữ liệu `deskV2` của Profile 7 (UID 61578904126150) s
 
 **Chưa kiểm tra:** một lượt Post Research thật ghi ra Docs mới, rồi FB Desk đọc lại Docs đó. Test hiện mô phỏng HTML Docs có thụt lề 18pt/36pt.
 
+## Đồng hồ xoay hẹn giờ (thay cơ chế 3/5/10 phút)
+
+- Ô "Tần suất đăng" (3 phút, 5 phút, 10 phút, 15 phút, 1 tiếng, 5 tiếng, Tùy chỉnh) được thay bằng **một đồng hồ xoay** (`schedule-dial.js`).
+  - **Giờ bắt đầu:** kim chạy như đồng hồ thật, mỗi vòng 60 phút; quay qua số 12 thì sang giờ kế. Không quay lùi về quá khứ; nút "Về ngay bây giờ".
+  - **Khoảng cách:** quay tự do từ 1 phút tới 24 giờ, mỗi vòng 60 phút.
+  - Điều khiển bằng kéo quanh mặt đồng hồ, cuộn chuột (giữ Shift = 10 phút), hoặc phím mũi tên / PageUp / PageDown / Home.
+  - Bên cạnh hiện trước giờ đăng của các bài sắp xếp, ví dụ "5 bài · Bắt đầu hôm nay 10:45, mỗi bài cách 5 phút → 10:45 · 10:50 · 10:55 · 11:00 …".
+- `bot-enqueue` nhận thêm `startAt`. `assignSlots` bắt đầu từ giờ đó.
+- Đã bỏ `useThreeMinuteSchedule`, cơ chế của 3.8.6 tự dời mọi bài chờ về cách nhau 3 phút. Lịch người dùng quay trên đồng hồ được giữ nguyên.
+- Khoảng cách tối thiểu giữa hai lần bấm Đăng vẫn được giữ đúng giá trị đã chọn: bài mở sớm để chuẩn bị, rồi nút Đăng chờ đúng mốc.
+
+## Chạy thử (không đăng)
+
+- Nút **Chạy thử** trên thẻ bài: bot làm đủ các bước như lượt thật (mở ô soạn, điền nội dung, tải album/video, kiểm tra nút Đăng), rồi dừng **trước** khi bấm Đăng.
+- Bot chụp cấu trúc hộp soạn (`desk.ui-snapshot/1`): nút, nhãn, số ảnh/video, kích thước, trạng thái nút Đăng. Caption, tên nick và dãy số dài được thay bằng nhãn ẩn. Bản chụp tải về được bằng nút "Tải cấu trúc giao diện".
+- Sau đó bot bấm Đóng → **Bỏ** bản nháp, và bài quay lại "Chờ chuẩn bị". Background chặn mọi lượt chạy thử có dấu vết bấm Đăng.
+
+## Gộp với 3.8.6.3
+
+Nhánh này đã gộp `main` (3.8.6.3 của LePhuongThao038 + log thống kê) mà không bỏ thay đổi nào. Ở phần đếm ảnh, giữ cách đếm theo `src` và kiểm tra "+N" phải đè lên ảnh của 3.8.6.3, cộng thêm nhãn "Ảnh/video, đã thêm N" của 3.8.7. Media Bridge giữ thứ tự ưu tiên hd/sd của 3.8.6.3; thực tế có Reel mà bản hd cũng là AV1, và 3.8.7 tự chuyển sang H.264 nên vẫn an toàn.
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.
@@ -35,8 +56,9 @@ Nguồn phân tích: dữ liệu `deskV2` của Profile 7 (UID 61578904126150) s
 ## Kiểm thử
 
 ```
-node tests/fixes-387.mjs          # nhịp 3 phút, caption chữ giao diện
-node tests/post-flow-387.mjs      # chờ hộp soạn đóng, báo lỗi sau khi đăng, tìm link có emoji (Playwright)
+node tests/fixes-387.mjs          # nhịp đăng, caption chữ giao diện, phân nhánh comment
+node tests/dial-387.mjs           # đồng hồ xoay (Playwright)
+node tests/post-flow-387.mjs      # chờ hộp soạn đóng, báo lỗi sau khi đăng, tìm link có emoji, thụt lề Docs, chạy thử (Playwright)
 node tests/post-flow-386.mjs      # 11 kịch bản cũ vẫn đạt
 node tests/link-lookup-386.mjs    # 5 kịch bản cũ vẫn đạt
 python tests/start-video.py; python tests/video-limit.py; python tests/video-health-origin.py

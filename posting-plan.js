@@ -1,4 +1,5 @@
 import {parseTime,docsSource} from './scenario.js';
+// 3.8.7: chỉ là vị trí ban đầu của đồng hồ xoay, không còn ép hàng chờ về 3 phút.
 export const DEFAULT_INTERVAL_MINUTES=3;
 export const DEFAULT_GAP_MS=DEFAULT_INTERVAL_MINUTES*60000;
 
@@ -29,9 +30,10 @@ export function validatePlan(input,result){
  return ids.map(id=>result.items.find(i=>i.id===id));
 }
 export function directPlan(input){return input.groups.flatMap(g=>g.posts.map(p=>({id:p.id,time:p.time?parseTime(p.time).iso:'',mode:p.time?'explicit':'default'})));}
-export function assignSlots(items,existing,now=Date.now(),gap=DEFAULT_GAP_MS){
+export function assignSlots(items,existing,now=Date.now(),gap=DEFAULT_GAP_MS,startAt=0){
  // Reserve slots across all sources/batches, and enforce actual publish spacing again at runtime.
- let cursor=now;for(const j of existing.filter(j=>!['cancelled','failed'].includes(j.state))){const t=Date.parse(j.submittedAt||j.dueAt);if(Number.isFinite(t))cursor=Math.max(cursor,t+gap);}
+ // 3.8.7: startAt = giờ bắt đầu chọn trên đồng hồ xoay (0 = ngay bây giờ).
+ let cursor=Math.max(now,Number(startAt)||0);for(const j of existing.filter(j=>!['cancelled','failed'].includes(j.state))){const t=Date.parse(j.submittedAt||j.dueAt);if(Number.isFinite(t))cursor=Math.max(cursor,t+gap);}
  return items.map(item=>{if(item.mode==='explicit'){const dueAt=parseTime(item.time).kind==='future'?parseTime(item.time).iso:new Date(now).toISOString();cursor=Math.max(cursor,Date.parse(dueAt)+gap);return {...item,minGapMs:0,dueAt};}const dueAt=new Date(cursor).toISOString();cursor+=gap;return {...item,minGapMs:gap,dueAt};});
 }
 // 3.8.7: "cách 3 phút" là khoảng cách giữa hai lần bấm Đăng. Bản cũ chỉ bắt đầu MỞ bài sau khi
