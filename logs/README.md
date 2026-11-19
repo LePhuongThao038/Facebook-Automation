@@ -1,6 +1,6 @@
 # Log tiến độ đăng bài
 
-Cập nhật tự động lúc **17:10:11 19/11/2026** (giờ Việt Nam), lấy từ CSV tự lưu mới nhất của từng nick.
+Cập nhật tự động lúc **17:30:44 19/11/2026** (giờ Việt Nam), lấy từ CSV tự lưu mới nhất của từng nick.
 
 File dữ liệu: [ThongKe-TongHop.csv](ThongKe-TongHop.csv) (theo nick) · [ThongKe-ChiTiet.csv](ThongKe-ChiTiet.csv) (bài đã lên Facebook) · [ThongKe-TatCa.csv](ThongKe-TatCa.csv) (mọi bài, cả lỗi). Lịch sử các lần cập nhật xem trong git log của thư mục này.
 
