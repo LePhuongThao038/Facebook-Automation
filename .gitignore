@@ -14,3 +14,6 @@ work/
 outputs/
 __pycache__/
 node_modules/
+
+# Log tiến độ được phép đưa lên
+!logs/*.csv
