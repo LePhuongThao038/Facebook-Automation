@@ -8,7 +8,12 @@ function readCharacter(about){
  const all=(s,r=root)=>[...r.querySelectorAll(s)].filter(e=>safe(e)&&e.getClientRects().length);
  const txt=e=>(e?.innerText||'').trim();
  const followerLink = all('a[href*="/followers"]').at(0);
- let identity = all('h1,[aria-level="1"]')[0];
+ // 0.2.23: tên chủ trang lấy từ tiêu đề trang (og:title / document.title). Thẻ h1 đầu tiên có thể là tên
+ // nick đang đăng nhập hoặc nằm ngoài [role=main], làm sai Tên, Avatar, Ảnh bìa.
+ const titleName=String(document.querySelector('meta[property="og:title"]')?.content||document.title||'').replace(/^\(\d+\)\s*/,'').replace(/\s*[|·–-]\s*Facebook\s*$/i,'').trim();
+ const usableTitle=titleName&&!/^facebook$/i.test(titleName)&&titleName.length<120;
+ const anyH1=[...document.querySelectorAll('h1,[aria-level="1"]')].filter(e=>e.getClientRects().length&&!e.closest('[role=article],article,[role=feed],nav,[role=navigation],[role=banner]'));
+ let identity = (usableTitle&&anyH1.find(e=>txt(e).replace(/\s+/g,' ').startsWith(titleName)))||all('h1,[aria-level="1"]')[0];
  if (!identity && followerLink) {
    for (let box = followerLink.parentElement; box && box !== root; box = box.parentElement) {
      const before = all('button,[role=button]', box).find(button =>
@@ -17,7 +22,7 @@ function readCharacter(about){
    }
  }
  let avatarPage = '';
- const name = txt(identity), out = {}, media = {};
+ const name = usableTitle?titleName:txt(identity), out = {}, media = {};
  const match=name.match(/^(.+?)\s*\(([^()]+)\)$/s);if(name)out['Tên']=(match?.[1]||name).trim();if(match)out.Nickname=match[2].trim();
  const src=e=>e?.currentSrc||e?.getAttribute('href')||e?.getAttribute('xlink:href')||e?.src;
  function section(h){let p=h.parentElement;for(let i=0;p&&p!==root&&i<6;i++,p=p.parentElement){if(txt(p)!==txt(h)&&!p.querySelector('article,[role=feed],[role=article]')&&txt(p).length<3500)return p}}
@@ -46,8 +51,9 @@ function readCharacter(about){
        out['Mô tả'] = txt(bio);
      break;
    }
-   for (const image of all('img,svg image')) {
-     if (!identity || !(image.compareDocumentPosition(identity) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+   const images=[...new Set([...all('img,svg image'),...(identity&&!root.contains(identity)?[...document.querySelectorAll('img,svg image')].filter(e=>e.getClientRects().length&&!e.closest('[role=article],article,[role=feed],nav,[role=navigation],[role=banner]')):[])])];
+   for (const image of images) {
+     if (identity && !(image.compareDocumentPosition(identity) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
      const link = image.closest('a,button,[role=button]');
      const labels = [image.alt, link?.getAttribute('aria-label'), image.closest('svg')?.getAttribute('aria-label')].filter(Boolean);
      const url = src(image);

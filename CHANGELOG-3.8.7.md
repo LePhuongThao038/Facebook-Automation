@@ -47,6 +47,17 @@ Nguồn phân tích: dữ liệu `deskV2` của Profile 7 (UID 61578904126150) s
 
 Nhánh này đã gộp `main` (3.8.6.3 của LePhuongThao038 + log thống kê) mà không bỏ thay đổi nào. Ở phần đếm ảnh, giữ cách đếm theo `src` và kiểm tra "+N" phải đè lên ảnh của 3.8.6.3, cộng thêm nhãn "Ảnh/video, đã thêm N" của 3.8.7. Media Bridge giữ thứ tự ưu tiên hd/sd của 3.8.6.3; thực tế có Reel mà bản hd cũng là AV1, và 3.8.7 tự chuyển sang H.264 nên vẫn an toàn.
 
+## Post Research 0.2.23 (19/11, theo Docs của Nguyễn Tùng Giang)
+
+Docs mẫu bị các lỗi sau: không có thụt lề, chủ trang bị gắn vai "Bạn nam 1", Bài 9 lấy nhầm comment làm caption, phần thông tin nhân vật sai tên ("Hoàng Quốc Việt") và không có avatar hay ảnh bìa.
+
+| Lỗi | Nguyên nhân (kiểm tra trên trang thật) | Sửa |
+|---|---|---|
+| Không thụt lề, không phân nhánh | Facebook ghi nút "Xem 3 câu trả lời"; bản quét chỉ bấm nút có chữ "phản hồi/replies" nên phản hồi không được mở | Nhận thêm "câu trả lời". Trên trang thật ra đúng cấp 0–3 |
+| Chủ trang thành "Bạn nam 1" | Trang ảnh không có hộp thoại "Bài viết của …"; nhãn "Tác giả" là chữ thường, không phải `aria-label` | Nhận vai Tác giả theo nhãn chữ hoặc UID chủ bài |
+| Caption là một comment | Phản hồi "X đáp lại phản hồi của Y" không bị nhận là comment | Nhận đúng là comment; Bài 9 ra caption thật |
+| Tên nhân vật sai, thiếu avatar và ảnh bìa | Tên lấy từ thẻ h1 đầu tiên, có thể là tên nick đang đăng nhập; avatar chỉ được nhận khi nhãn ảnh trùng tên đó | Tên lấy từ tiêu đề trang; tìm ảnh cả ngoài `[role=main]`. **Chưa kiểm chứng** trên trang cá nhân thật |
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.

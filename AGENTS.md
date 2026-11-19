@@ -6,7 +6,7 @@ Repo này có nhiều người và nhiều agent cùng đẩy mã. Đọc hết 
 
 | Mục đích | Lấy | Ghi chú |
 |---|---|---|
-| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7`** (nhánh `release/3.8.7`) | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research 0.2.22 trong `post-research/` |
+| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7`** (nhánh `release/3.8.7`) | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.23** trong `post-research/` |
 | Quay lại bản trước khi gộp 3.8.7 | tag **`backup/main-2026-11-19-before-3.8.7`** | Đúng trạng thái `main` lúc 17:51 19/11/2026 (commit `f70da96`, bản 3.8.6.3 + log thống kê) |
 | Bản 3.8.6.2 gốc | tag **`backup/3.8.6.2`** (commit `9e5483d`) | |
 
@@ -25,7 +25,13 @@ FB Desk (thư mục gốc repo, `manifest.json` 3.8.7):
 7. **Chạy thử** (nút "Chạy thử" trên thẻ bài): bot làm đủ các bước tới trước nút Đăng rồi bỏ bản nháp, **không đăng**. Kết quả có nút "Tải cấu trúc giao diện" (JSON đã ẩn caption, tên nick và dãy số dài) để dựng test giống Facebook thật.
 8. **Phân nhánh comment.** FB Desk đọc thụt lề Docs (18pt mỗi cấp) thành cấp phản hồi và gắn reply vào comment cha (`scenario.js` `htmlBlocks`, `cross-comment-model.js` `parseCommentLines`).
 
-Post Research 0.2.22 (`post-research/`, extension riêng):
+Post Research 0.2.23 (`post-research/`, extension riêng), kiểm tra trên bài thật của Nguyễn Tùng Giang ngày 19/11:
+- **Phân nhánh comment:** Facebook đổi nút thành "Xem N câu trả lời", nên bản cũ không mở phản hồi và mọi comment nằm cấp 0. Đã nhận chữ "câu trả lời"; trên bài thật ra đúng cấp 0–3.
+- **Vai Tác giả:** nhãn "Tác giả" giờ là chữ thường cạnh tên, không phải `aria-label`; trang ảnh không có hộp thoại "Bài viết của …". Nay nhận theo nhãn chữ hoặc UID chủ bài.
+- **Caption lấy nhầm comment:** phản hồi dạng "X đáp lại phản hồi của Y" giờ được nhận là comment.
+- **Thông tin nhân vật:** tên chủ trang lấy từ tiêu đề trang thay vì thẻ h1 đầu tiên (đã gây ra "Tên: Hoàng Quốc Việt"). **Chưa kiểm chứng** trên trang cá nhân thật, vì nick dùng để kiểm tra bị Facebook chặn xem trang cá nhân.
+
+Post Research 0.2.22:
 - Loại chữ giao diện khỏi caption. Reel/video không có caption trong DOM thì dùng `og:description` của đúng trang đó.
 - Bỏ nhãn "của tác giả", "người theo dõi" khỏi nội dung comment.
 - Phân cấp comment đã kiểm tra trên 2 bài Facebook thật: đúng cấp, đúng comment cha.

@@ -2,7 +2,7 @@
 globalThis.researchCaption = (()=>{
  const normalize=s=>String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\ufeff]/g,'').replace(/\s+/g,' ').trim();
  const clean=s=>String(s||'').replace(/(?:\s|\u00a0)*(?:xem thêm|see more)\s*$/i,'').trim();
- const comment=e=>{for(let p=e;p;p=p.parentElement){if(p.matches?.('[data-commentid],[data-comment-id]'))return true;if(p.matches?.('article,[role="article"]')&&/^(?:bình luận(?:\s|$)|phản hồi|đáp lại|comment(?:\s|$)|reply|replied)/i.test(p.getAttribute('aria-label')||''))return true;}return false;};
+ const comment=e=>{for(let p=e;p;p=p.parentElement){if(p.matches?.('[data-commentid],[data-comment-id]'))return true;if(p.matches?.('article,[role="article"]')&&/^(?:bình luận(?:\s|$)|phản hồi|đáp lại|comment(?:\s|$)|reply|replied)|\s(?:đáp lại phản hồi của|replied to)\s/i.test(p.getAttribute('aria-label')||''))return true;}return false;};
  function text(element){
   if(!element)return '';const clone=element.cloneNode(true);
   for(const e of clone.querySelectorAll('button,[role="button"],[role="menu"],[contenteditable="true"],script,style'))e.remove();
