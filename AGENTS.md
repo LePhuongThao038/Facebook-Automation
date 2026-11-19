@@ -6,7 +6,7 @@ Repo này có nhiều người và nhiều agent cùng đẩy mã. Đọc hết 
 
 | Mục đích | Lấy | Ghi chú |
 |---|---|---|
-| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7`** (nhánh `release/3.8.7`) | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.23** trong `post-research/` |
+| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7-1`** (đầu nhánh `release/3.8.7`, PR #1). Tag `v3.8.7` là mốc trước khi có Post Research 0.2.23 | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.23** trong `post-research/` |
 | Quay lại bản trước khi gộp 3.8.7 | tag **`backup/main-2026-11-19-before-3.8.7`** | Đúng trạng thái `main` lúc 17:51 19/11/2026 (commit `f70da96`, bản 3.8.6.3 + log thống kê) |
 | Bản 3.8.6.2 gốc | tag **`backup/3.8.6.2`** (commit `9e5483d`) | |
 
