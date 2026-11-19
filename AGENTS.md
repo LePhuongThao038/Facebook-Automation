@@ -6,7 +6,7 @@ Repo này có nhiều người và nhiều agent cùng đẩy mã. Đọc hết 
 
 | Mục đích | Lấy | Ghi chú |
 |---|---|---|
-| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7-2`** (đầu nhánh `release/3.8.7`, PR #1). Tag `v3.8.7` và `v3.8.7-1` là các mốc cũ hơn | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.24** trong `post-research/` |
+| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7-3`** (đầu nhánh `release/3.8.7`, PR #1). Các tag `v3.8.7`, `v3.8.7-1`, `v3.8.7-2` là mốc cũ hơn | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.25** trong `post-research/` |
 | Quay lại bản trước khi gộp 3.8.7 | tag **`backup/main-2026-11-19-before-3.8.7`** | Đúng trạng thái `main` lúc 17:51 19/11/2026 (commit `f70da96`, bản 3.8.6.3 + log thống kê) |
 | Bản 3.8.6.2 gốc | tag **`backup/3.8.6.2`** (commit `9e5483d`) | |
 
@@ -30,6 +30,8 @@ Post Research 0.2.23 (`post-research/`, extension riêng), kiểm tra trên bài
 - **Vai Tác giả:** nhãn "Tác giả" giờ là chữ thường cạnh tên, không phải `aria-label`; trang ảnh không có hộp thoại "Bài viết của …". Nay nhận theo nhãn chữ hoặc UID chủ bài.
 - **Caption lấy nhầm comment:** phản hồi dạng "X đáp lại phản hồi của Y" giờ được nhận là comment.
 - **Thông tin nhân vật:** tên chủ trang lấy từ tiêu đề trang thay vì thẻ h1 đầu tiên (đã gây ra "Tên: Hoàng Quốc Việt"). **Chưa kiểm chứng** trên trang cá nhân thật, vì nick dùng để kiểm tra bị Facebook chặn xem trang cá nhân.
+
+Post Research 0.2.25, **kiểm tra trên trang cá nhân thật của Nguyễn Tùng Giang**: trang không có thẻ h1 và tiêu đề chỉ là "Facebook", nên bản cũ không đọc được tên, kéo theo mất avatar. Nay tên lấy từ nhãn avatar lớn ở đầu trang. Biệt danh, hạng mục và ngày tham gia lấy từ hộp "Giới thiệu về …", mở bằng cách bấm vào tên rồi đóng lại. Kết quả: Tên, Biệt danh "Giang", Mô tả "Người sáng tạo nội dung số", Sống tại, Avatar và Ảnh bìa đều có. Ngày sinh và tình trạng hôn nhân của trang này không công khai.
 
 Post Research 0.2.24: đọc **Biệt danh**, mô tả kiểu "Người sáng tạo nội dung số", và avatar không còn bắt buộc nằm trước thẻ tên (chọn ảnh lớn nhất có nhãn trùng tên hoặc "ảnh đại diện"). Gộp thêm 2 cải tiến từ bản `E:\HQV\Post-Research-0_2_22` (16/11, một bản 0.2.22 **khác** bản trong repo): ảnh bìa cỡ gốc, và chỉ nhận đúng ảnh đại diện hiện tại. Lưu ý: từng có 2 bản cùng tên 0.2.22; bản trong repo là bản đã gộp cả hai.
 

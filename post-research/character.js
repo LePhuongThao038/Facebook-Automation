@@ -13,7 +13,10 @@ function readCharacter(about){
  const titleName=String(document.querySelector('meta[property="og:title"]')?.content||document.title||'').replace(/^\(\d+\)\s*/,'').replace(/\s*[|·–-]\s*Facebook\s*$/i,'').trim();
  const usableTitle=titleName&&!/^facebook$/i.test(titleName)&&titleName.length<120;
  const anyH1=[...document.querySelectorAll('h1,[aria-level="1"]')].filter(e=>e.getClientRects().length&&!e.closest('[role=article],article,[role=feed],nav,[role=navigation],[role=banner]'));
- let identity = (usableTitle&&anyH1.find(e=>txt(e).replace(/\s+/g,' ').startsWith(titleName)))||all('h1,[aria-level="1"]')[0];
+ const headerAvatar=[...root.querySelectorAll('svg')].filter(svg=>svg.getClientRects().length&&!svg.closest('[role=article],article,[role=feed],nav,[role=navigation],[role=banner]')&&svg.querySelector('image')&&svg.getAttribute('aria-label')&&svg.getBoundingClientRect().width>=100&&/\/photo/.test(svg.closest('a[href]')?.getAttribute('href')||'')).sort((a,b)=>b.getBoundingClientRect().width-a.getBoundingClientRect().width)[0];
+ const avatarName=(headerAvatar?.getAttribute('aria-label')||'').trim();
+ const bigName=[...root.querySelectorAll('[role=button] span,h1,h2')].find(e=>e.getClientRects().length&&!e.closest('[role=article],article,[role=feed],[role=dialog]')&&parseFloat(getComputedStyle(e).fontSize)>=24&&txt(e).length>1&&txt(e).length<80);
+ let identity = (usableTitle&&anyH1.find(e=>txt(e).replace(/\s+/g,' ').startsWith(titleName)))||all('h1,[aria-level="1"]')[0]||(avatarName&&bigName&&txt(bigName).startsWith(avatarName)?bigName:null);
  if (!identity && followerLink) {
    for (let box = followerLink.parentElement; box && box !== root; box = box.parentElement) {
      const before = all('button,[role=button]', box).find(button =>
@@ -22,7 +25,7 @@ function readCharacter(about){
    }
  }
  let avatarPage = '', coverPage = '';
- const name = usableTitle?titleName:txt(identity), out = {}, media = {};
+ const name = usableTitle?titleName:(avatarName||txt(identity)), out = {}, media = {};
  const match=name.match(/^(.+?)\s*\(([^()]+)\)$/s);if(name)out['Tên']=(match?.[1]||name).trim();if(match)out.Nickname=match[2].trim();
  const src=e=>e?.currentSrc||e?.getAttribute('href')||e?.getAttribute('xlink:href')||e?.src;
  function section(h){let p=h.parentElement;for(let i=0;p&&p!==root&&i<6;i++,p=p.parentElement){if(txt(p)!==txt(h)&&!p.querySelector('article,[role=feed],[role=article]')&&txt(p).length<3500)return p}}
@@ -32,7 +35,7 @@ function readCharacter(about){
  if(intro&&section(intro))parts.push(section(intro));
  for(const h of heads){if(/^(Thông tin cá nhân|Personal details|Details|Chi tiết|Contact info|Thông tin liên hệ|Basic info|Thông tin cơ bản|Du lịch|Travel)$/i.test(txt(h))&&section(h))parts.push(section(h))}
  if(about)parts.push(root);
- const patterns={'Nickname':/^(?:Biệt danh|Nickname|Tên khác|Other names?)\s*[:：]?\s*/i,'Sống tại':/^(?:Sống (?:tại|ở)|Lives in)\s*[:：]?\s*/i,'Ngày sinh':/^(?:Ngày sinh|Sinh nhật|Birthday|Date of birth)\s*[:：]?\s*/i,'Tình trạng hôn nhân':/^(?:Tình trạng (?:hôn nhân|mối quan hệ)|Relationship status)\s*[:：]?\s*/i,'Quan tâm':/^(?:Quan tâm(?: đến)?|Interested in)\s*[:：]?\s*/i,'Du lịch':/^(?:Du lịch|Travel|Places visited)\s*[:：]?\s*/i,'Thông tin liên hệ':/^(?:Thông tin liên hệ|Contact info(?:rmation)?)\s*[:：]?\s*/i};
+ const patterns={'Mô tả':/^(?:Hạng mục|Category)\s*[:：]\s*/i,'Nickname':/^(?:Biệt danh|Nickname|Tên khác|Other names?)\s*[:：]?\s*/i,'Sống tại':/^(?:Sống (?:tại|ở)|Lives in)\s*[:：]?\s*/i,'Ngày sinh':/^(?:Ngày sinh|Sinh nhật|Birthday|Date of birth)\s*[:：]?\s*/i,'Tình trạng hôn nhân':/^(?:Tình trạng (?:hôn nhân|mối quan hệ)|Relationship status)\s*[:：]?\s*/i,'Quan tâm':/^(?:Quan tâm(?: đến)?|Interested in)\s*[:：]?\s*/i,'Du lịch':/^(?:Du lịch|Travel|Places visited)\s*[:：]?\s*/i,'Thông tin liên hệ':/^(?:Thông tin liên hệ|Contact info(?:rmation)?)\s*[:：]?\s*/i};
  for(const part of parts){const lines=[...all('span,div,h2,h3,a',part)].filter(e=>!e.closest('[role=tablist],[role=tab]')&&!e.children.length).flatMap(e=>txt(e).split('\n')).map(x=>x.trim()).filter(Boolean);
  for(let i=0;i<lines.length;i++){let line=lines[i];for(const [key,re] of Object.entries(patterns)){if(!re.test(line)||/Thông tin liên hệ và cơ bản|Contact and basic info/i.test(line))continue;
  let v=line.replace(re,'');if(!v){let node=all('span,div,h2,h3',part).find(e=>txt(e)===line&&!e.children.length&&!e.closest('[role=tablist],[role=tab]'));let box=node&&section(node);let vals=(box?all('span,div,a',box).filter(e=>!e.children.length).map(txt):[]).map(x=>x.trim()).filter(x=>x&&x!==line&&!/^(Chỉnh sửa|Edit|Xem thêm|See more)$/i.test(x));if(vals.length&&vals.length<=8&&!vals.some(x=>Object.values(patterns).some(r=>r.test(x))))v=vals.join('\n')}
@@ -77,6 +80,29 @@ function readCharacter(about){
  let feat=heads.find(e=>/^(Tin nổi bật|Đáng chú ý|Featured|Highlights)$/i.test(txt(e)));let nodes=[...all('a[href*="profile_highlight"],a[href*="/stories/highlights/"]')];if(!nodes.length&&feat&&section(feat))nodes.push(section(feat));let urls=[...new Set(nodes.flatMap(n=>all('img,svg image',n).map(src)).filter(u=>/^https:\/\//.test(u||'')))];if(urls.length)media['Tin nổi bật']=urls}
  return {out,media,avatarPage,coverPage};
 }
+// 0.2.25: trang cá nhân (nhất là chế độ chuyên nghiệp) chỉ cho xem biệt danh và hạng mục trong hộp
+// "Giới thiệu về …", mở bằng cách bấm vào tên ở đầu trang. Chỉ mở, đọc rồi đóng; không thao tác gì khác.
+async function readProfileDialog(name){
+ const pause=ms=>new Promise(r=>setTimeout(r,ms)),vis=e=>!!e?.getClientRects().length,txt=e=>(e?.innerText||'').trim();
+ const main=document.querySelector('[role=main],main');if(!main||!name)return null;
+ const button=[...main.querySelectorAll('[role=button]')].find(b=>vis(b)&&!b.closest('[role=article],article,[role=feed],[role=dialog]')&&txt(b).replace(/\s+/g,' ').trim()===name&&parseFloat(getComputedStyle(b.querySelector('span')||b).fontSize)>=22);
+ if(!button)return null;
+ const before=new Set(document.querySelectorAll('[role=dialog]'));button.click();
+ let dialog=null;for(let i=0;i<20&&!dialog;i++){await pause(250);dialog=[...document.querySelectorAll('[role=dialog]')].filter(d=>vis(d)&&!before.has(d)&&txt(d).includes(name)).pop()||null;}
+ if(!dialog)return null;
+ const lines=txt(dialog).split('\n').map(x=>x.trim()).filter(Boolean),out={};
+ for(const line of lines){
+  let m;
+  if((m=line.match(/^(?:Biệt danh|Nickname|Tên khác|Other names?)\s*[:：]\s*(.+)$/i)))out.Nickname=m[1];
+  else if((m=line.match(/^(?:Sống (?:tại|ở)|Lives in)\s*[:：]?\s*(.+)$/i)))out['Sống tại']=m[1];
+  else if((m=line.match(/^(?:Sinh nhật|Ngày sinh|Birthday)\s*[:：]?\s*(.+)$/i)))out['Ngày sinh']=m[1];
+  else if((m=line.match(/^(?:Đã tham gia Facebook|Joined Facebook)\s*[:：]\s*(.+)$/i)))out.joined=m[1];
+  else if(/^(?:Người sáng tạo nội dung số|Nhà sáng tạo nội dung số|Digital creator|Content creator|Người của công chúng|Public figure|Blogger|Doanh nhân|Entrepreneur|Nghệ sĩ|Artist)$/i.test(line))out.category=line;
+ }
+ const close=[...dialog.querySelectorAll('[role=button][aria-label]')].find(b=>/^(?:đóng|close)$/i.test(b.getAttribute('aria-label')));
+ if(close)close.click();else document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ return out;
+}
 function showCharacter(){let box=$('character');box.replaceChildren();box.hidden=!character;if(!character)return;const add=(tag,s)=>{let e=document.createElement(tag);e.textContent=s;box.append(e);return e};add('h3','Thông tin về Profile này');for(const k of characterFields)add('div',k+': '+(character.out[k]||characterMissing));for(const k of characterMedia){add('strong',k+': ');const warn=k==='Ảnh Avatar'?character.avatarWarning:k==='Ảnh Cover photo'?character.coverWarning:'';if(warn)add('span',warn+' ');let imgs=character.media[k]||[];if(!imgs.length)add('span',characterMissing);for(const src of imgs){let im=add('img','');im.src=src;im.alt=k;im.style='max-height:90px;max-width:180px;vertical-align:middle;margin:4px';}add('br','')}}
 async function loadCharacter(id,url){
  const read=async(t,a)=>(await chrome.scripting.executeScript({target:{tabId:t},func:readCharacter,args:[a]}))[0]?.result;
@@ -88,6 +114,10 @@ async function loadCharacter(id,url){
  }
  if (!base) return;
  character={...base,pics:{},url};showCharacter();
+ try{const [box]=await chrome.scripting.executeScript({target:{tabId:id},func:readProfileDialog,args:[base.out['Tên']||'']});const info=box?.result;
+  if(info){if(info.Nickname&&!character.out.Nickname)character.out.Nickname=info.Nickname;if(info['Sống tại']&&!character.out['Sống tại'])character.out['Sống tại']=info['Sống tại'];if(info['Ngày sinh']&&!character.out['Ngày sinh'])character.out['Ngày sinh']=info['Ngày sinh'];
+   const about=[info.category,info.joined?'Tham gia Facebook: '+info.joined:''].filter(Boolean).join(' · ');if(about&&!character.out['Mô tả'])character.out['Mô tả']=about;showCharacter();}
+ }catch{}
  if (base.media['Ảnh Avatar']?.length) {
    try { await resolveAvatar(character); }
    catch { character.avatarWarning = 'Facebook chỉ cung cấp ảnh đại diện xem trước.'; }
