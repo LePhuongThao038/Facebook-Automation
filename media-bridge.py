@@ -42,6 +42,7 @@ FORMAT = '/'.join([
 ANY_FORMAT = 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best'
 YTDLP_TIMEOUT = 840
 FFMPEG_TIMEOUT = 120
+TRANSCODE_TIMEOUT = 600
 PROBE_TIMEOUT = 60
 QUEUE_WAIT = 25       # giay cho luot trong bridge truoc khi tra 409 de extension hoi lai
 CACHE_TTL = 45 * 60   # giay
@@ -115,7 +116,7 @@ def probe(manifest, run=subprocess.run):
     if info:
         size, exact = _size_of(info)
         status = 'unknown' if size is None else ('ok' if size <= MAX_OUTPUT else 'too_big' if exact else 'unknown')
-        return {'status': status, 'bytes': size, 'exact': exact, 'duration': info.get('duration'), 'maxMB': MAX_MB}
+        return {'status': status, 'bytes': size, 'exact': exact, 'duration': info.get('duration'), 'maxMB': MAX_MB, **caption_of(info)}
     if 'requested format' not in err.lower() and 'format is not available' not in err.lower():
         return {'status': 'error', 'error': 'Khong doc duoc video cong khai.', 'maxMB': MAX_MB}
     # Khong co ban nao lot bo loc 200 MB: kiem tra video co ton tai va lay dung luong de bao.
@@ -123,7 +124,14 @@ def probe(manifest, run=subprocess.run):
     if not info:
         return {'status': 'error', 'error': 'Khong doc duoc video cong khai.', 'maxMB': MAX_MB}
     size, exact = _size_of(info)
-    return {'status': 'too_big' if exact and size is not None and size > MAX_OUTPUT else 'unknown', 'bytes': size, 'exact': exact, 'duration': info.get('duration'), 'maxMB': MAX_MB}
+    return {'status': 'too_big' if exact and size is not None and size > MAX_OUTPUT else 'unknown', 'bytes': size, 'exact': exact, 'duration': info.get('duration'), 'maxMB': MAX_MB, **caption_of(info)}
+
+
+def caption_of(info):
+    """3.8.7: caption cong khai cua video/Reel (yt-dlp doc tu trang cong khai). FB Desk dung khi Post Research
+    ghi nham chu giao dien (vd. 'Facebook') vao cho caption."""
+    description = info.get('description')
+    return {'caption': description.strip() if isinstance(description, str) else '', 'captionKnown': isinstance(description, str)}
 
 
 def prepare_mp4(manifest, directory, run=subprocess.run, ffmpeg='ffmpeg'):
@@ -146,7 +154,31 @@ def prepare_mp4(manifest, directory, run=subprocess.run, ffmpeg='ffmpeg'):
         raise ValueError('Khong dung duoc MP4 hop le; chua dang bai.')
     if output.stat().st_size > MAX_OUTPUT:
         raise ValueError('MP4 vượt 200 MB của kênh upload hiện tại. Chưa đăng; không tự giảm chất lượng video.')
+    # 3.8.7: Facebook hien phat Reels/video bang AV1 (ca ban hd/sd), nen yt-dlp tai ve MP4 AV1.
+    # Trinh tai len trang ca nhan khong on dinh voi AV1, nen chuyen sang H.264 + AAC (giu do phan giai).
+    codec = video_codec(output, run=run, ffmpeg=ffmpeg)
+    if codec and codec != 'h264':
+        converted = Path(directory, 'ready-h264.mp4')
+        result = run([ffmpeg, '-nostdin', '-y', '-i', str(output), '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'veryfast',
+                      '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', str(converted)],
+                     cwd=directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=TRANSCODE_TIMEOUT)
+        if result.returncode or not converted.exists() or not converted.stat().st_size:
+            raise ValueError('Khong chuyen duoc video %s sang H.264; chua dang bai.' % codec)
+        if converted.stat().st_size > MAX_OUTPUT:
+            raise ValueError('MP4 H.264 vượt 200 MB của kênh upload hiện tại. Chưa đăng bài này.')
+        output = converted
     return output
+
+
+def video_codec(path, run=subprocess.run, ffmpeg='ffmpeg'):
+    """Ten codec video dau tien theo ffmpeg ('h264', 'av1', 'vp9', 'hevc'...); '' neu khong doc duoc."""
+    try:
+        result = run([ffmpeg, '-hide_banner', '-nostdin', '-i', str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30)
+    except Exception:
+        return ''
+    err = result.stderr.decode('utf-8', 'replace') if isinstance(getattr(result, 'stderr', None), bytes) else str(getattr(result, 'stderr', '') or '')
+    match = re.search(r'Stream #\S+.*?: Video: (\w+)', err)
+    return match.group(1).lower() if match else ''
 
 
 class MediaCache:
@@ -164,7 +196,8 @@ class MediaCache:
         self.probes = {}
 
     def key(self, url):
-        return hashlib.sha256(url.encode('utf-8')).hexdigest()[:32]
+        # 3.8.7: doi ten bo nho dem khi doi dinh dang dau ra (AV1 -> H.264), khong dung lai tep cu.
+        return hashlib.sha256(('h264:' + url).encode('utf-8')).hexdigest()[:32]
 
     def path(self, url):
         return self.root / (self.key(url) + '.mp4')

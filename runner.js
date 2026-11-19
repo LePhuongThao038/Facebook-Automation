@@ -8,7 +8,7 @@ import {facebookBot} from './facebook-bot.js';
 import {waitFacebookTab} from './tab-ready.js';
 const status=document.getElementById('status');const sleep=ms=>new Promise(r=>setTimeout(r,ms));let running=false;
 // 3.8.6: service worker MV3 có thể khởi động lại giữa lượt; thử lại các lệnh an toàn thay vì đánh lỗi cả bài.
-const RETRYABLE=['runner-touch','runner-progress','runner-media','runner-media-chunk','runner-media-release','runner-finish','posting-clean-children'];
+const RETRYABLE=['runner-caption','runner-touch','runner-progress','runner-media','runner-media-chunk','runner-media-release','runner-finish','posting-clean-children'];
 async function rpc(type,values={}){for(let attempt=0;;attempt++){let r;try{r=await chrome.runtime.sendMessage({type,...values});}catch(error){r={ok:false,error:error.message,transport:true};}if(!r)r={ok:false,error:'Bộ điều khiển chưa phản hồi.',transport:true};if(r.ok)return r.data;const transport=r.transport||/message channel closed|Could not establish connection|Receiving end does not exist|Extension context/i.test(r.error||'');if(transport&&RETRYABLE.includes(type)&&attempt<3){await sleep(1500*(attempt+1));continue;}throw Error(r.error||'Mất kết nối bộ điều khiển.');}}
 async function loaded(tabId){return waitFacebookTab(tabId,id=>chrome.tabs.get(id),sleep);}
 async function execute(j){
@@ -19,6 +19,7 @@ async function execute(j){
  const action=async(name,extra={})=>{const r=(await chrome.scripting.executeScript({target:{tabId},func:facebookBot,args:[name,{...auth,actor:j.actor,verifiedSelfUrl,text:j.post.text,audience:'default',expectedMedia:j.expectedMedia||j.post.media.map(m=>m.type),...extra}]}))[0]?.result;if(!r?.ok){const e=Error(r?.error||'Facebook không phản hồi.');e.options=r?.options;e.action=name;e.uiDiagnostic=r?.uiDiagnostic;throw e;}return r;};
  try{
  if(!mediaOnlyPost(j.post)){fillMissingContent(j.post);cleanCaption(j.post);fillMissingContent(j.post);}
+  if(j.post.captionSuspect){await checkpoint('Đọc lại caption video');j.post=await rpc('runner-caption',auth);}
   if((j.expectedMedia&&JSON.stringify(j.expectedMedia)!==JSON.stringify(j.post.media.map(m=>m.type)))||(j.post.original?.media?.length||0)>j.post.media.length)throw Error('Media nguồn không khớp hàng chờ. Dừng trước khi mở Facebook.');
   const issue=captionIssue(j.post);if(issue)throw Error(issue);
   if(j.post.missingVideo)throw Error('Nguồn thiếu tệp video/Reels. Cập nhật link tệp trong Docs rồi tạo lượt mới.');
@@ -38,8 +39,13 @@ async function execute(j){
   if(j.post.feeling){await checkpoint('Chọn cảm xúc');const result=await action('pick',{field:'feeling',value:j.post.feeling});applied.push(result);await checkpoint('Đã chọn cảm xúc',{evidence:result});}
   for(const person of j.tags){await checkpoint('Gắn thẻ '+person);const result=await action('pick',{field:'people',value:person});applied.push(result);await checkpoint('Đã gắn thẻ',{evidence:result});}
   await checkpoint('Kiểm tra trước khi đăng');const ready=await action('check',{applied});await checkpoint('Chuẩn bị bấm Đăng',{evidence:{type:'publish-ui',...ready.uiDiagnostic}});await action('commit',{applied});proof.audienceMode='default';submitted=true;
+  // 3.8.7: chờ Facebook đóng hộp soạn (đã nhận bài) TRƯỚC khi đọc link hoặc chuyển trang. Album/video cần
+  // thêm thời gian gửi sau khi bấm Đăng; chuyển tab sớm làm bài không lên.
+  await checkpoint('Chờ Facebook đăng xong');const hasVideo=files.some(f=>String(f.type||'').startsWith('video/'));
+  const done=await action('published',{timeoutMs:hasVideo?600000:180000});proof.published=done.published===true;
   await checkpoint('Tìm permalink và xác minh');let verification;
   try{verification=await action('verify',{prior:opened.prior});}catch{
+   if(!proof.published)throw Error('Đã bấm Đăng nhưng hộp soạn của Facebook vẫn mở sau '+Math.round((done.waitedMs||0)/60000)+' phút. Giữ tab để Facebook đăng xong; không tự đăng lại.');
    const here=await chrome.tabs.get(tabId).catch(()=>null);
    if(here?.url&&canonicalPost(here.url)){
     try{
@@ -48,11 +54,15 @@ async function execute(j){
      if(link&&link===canonicalPost(here.url)&&!opened.prior.includes(link))verification={url:link,textMatch:true,authorMatch:true,source:'Thời gian dưới tên nick'};
     }catch{}
    }
-   try{if(!verification)verification=await findPublished({...j,prior:opened.prior},tabId);}catch(error){error.action='lookup';throw error;}
+   try{if(!verification)verification=await findPublished({...j,prior:opened.prior},tabId);}catch(error){
+    // Facebook đã nhận bài: ghi Đã đăng, đóng tab. Link được tìm lại sau khi hàng chờ rảnh.
+    verification={url:'',published:true,source:'Facebook đóng hộp soạn sau khi bấm Đăng',lookupError:String(error.message||'').slice(0,300)};
+   }
   }
-  url=verification.url;proof={...proof,textMatch:verification.textMatch,authorMatch:verification.authorMatch,source:verification.source||'Trang cá nhân'};
+  url=verification.url||'';proof={...proof,textMatch:verification.textMatch,authorMatch:verification.authorMatch,source:verification.source||'Trang cá nhân'};
+  if(j.backdate&&!url){await rpc('runner-finish',{...auth,result:{state:'partial',url:'',...proof,message:'Đã đăng nhưng chưa lấy được link nên chưa đổi ngày. Kiểm tra bài trên Facebook.'}});completed=true;status.textContent='Đã đăng (thiếu link): '+j.post.title;return;}
   if(j.backdate){await checkpoint('Đổi ngày bài đã đăng');await chrome.tabs.update(tabId,{url});await loaded(tabId);const result=await action('backdate',{url,requestedTime:j.requestedTime});proof.dateVerified=result.dateVerified;}
-  await rpc('runner-finish',{...auth,result:{state:'success',url,...proof,message:'Bot đã đăng và xác minh tác giả, nội dung, permalink'+(j.backdate?' và ngày giờ.':'.')}});completed=true;status.textContent='Hoàn tất: '+j.post.title+'\n'+url;
+  await rpc('runner-finish',{...auth,result:{state:'success',url,...proof,message:url?'Bot đã đăng và xác minh tác giả, nội dung, permalink'+(j.backdate?' và ngày giờ.':'.'):'Đã đăng: Facebook đã nhận bài (hộp soạn đóng sau khi bấm Đăng). Chưa lấy được link, bot sẽ tự tìm lại khi hàng chờ rảnh.'}});completed=true;status.textContent='Hoàn tất: '+j.post.title+'\n'+(url||'(chưa có link)');
  }catch(e){
   try{const s=await rpc('runner-touch',auth);submitted=s.submitted;}catch{}
   const result={state:submitted?(url?'partial':'unknown'):'failed',url,...proof,message:stage+': '+e.message+(e.uiDiagnostic?' [UI: '+e.uiDiagnostic.status+'; '+e.uiDiagnostic.language+'; '+e.uiDiagnostic.viewport?.width+'×'+e.uiDiagnostic.viewport?.height+'; tab '+(e.uiDiagnostic.visibility||'?')+']':''),...(e.options?{choices:e.options}:{}),failedAction:e.action||'',...(e.uiDiagnostic?{uiDiagnostic:e.uiDiagnostic}:{})};
@@ -61,4 +71,4 @@ async function execute(j){
  }finally{clearInterval(timer);await rpc('runner-media-release',auth).catch(()=>{});if(Number.isInteger(tabId)&&files.some(f=>f.transferId))await chrome.scripting.executeScript({target:{tabId},func:stageMediaChunk,args:[{clear:true,ids:files.map(f=>f.transferId).filter(Boolean)}]}).catch(()=>{});if(completed){if(Number.isInteger(tabId))await rpc('posting-clean-children',{root:tabId}).catch(()=>{});await closeWorkTab(tabId);}}
 }
 async function loop(){if(running)return;running=true;try{await taskSlot(async()=>{const j=await rpc('runner-claim');if(j)await execute(j);});}catch(e){status.textContent=e.message;}finally{running=false;}}
-setInterval(loop,2000);loop();
+setInterval(loop,2000);try{const tick=new Worker('runner-tick.js');tick.onmessage=()=>loop();}catch{}loop();

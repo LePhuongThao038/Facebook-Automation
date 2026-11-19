@@ -5,7 +5,10 @@ export async function facebookBot(action,payload={}){
   if(guard&&payload.jobId)guard.actionAt=Date.now();
   el.click();
  };
- const sleep=ms=>new Promise(r=>setTimeout(r,ms));const norm=s=>String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\u034f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+ // 3.8.7: Facebook vẽ emoji thành <img alt>, nên innerText của bài đã đăng thiếu emoji. So khớp sau khi bỏ emoji và khoảng trắng ở cả hai phía.
+ const flat=s=>String(s||'').normalize('NFKC').replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}\u200d\u20e3]/gu,'').replace(/[\s\u200b-\u200f\u034f\ufe0e\ufe0f]/gu,'').toLowerCase();
+ const norm=s=>String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\u034f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
  // 3.8.6: không loại phần tử theo opacity. Tab nền/cửa sổ bị che làm Chrome dừng animation,
  // hộp soạn có thể kẹt ở opacity 0 dù đã dựng xong và thao tác được.
  const visible=e=>!!(e&&e.isConnected&&!e.closest('[hidden],[inert],[aria-hidden="true"]')&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');
@@ -117,7 +120,7 @@ export async function facebookBot(action,payload={}){
   // Ảnh bìa của video (img nằm cùng khung với thẻ video) không tính thêm.
   const images=previews.filter(e=>e.tagName==='IMG'&&!previews.some(v=>v.tagName==='VIDEO'&&v.parentElement&&v.parentElement.parentElement?.contains(e))).length;
   let extra=0;for(const e of all('span,div',root))if(!e.children.length){const m=(e.innerText||'').trim().match(/^\+\s?(\d{1,3})$/);if(m)extra=Math.max(extra,Number(m[1]));}
-  const albumLabel=Math.max(0,...[root,...all('[aria-label]',root)].map(e=>{const m=(e.getAttribute('aria-label')||'').match(/(?:^|\s)(\d{1,3})\s*(?:photos|images|ảnh)(?:\s|$)|^(?:edit all|chỉnh sửa tất cả|sửa tất cả)\s*\(?(\d{1,3})\)?/i);return m?Number(m[1]||m[2]):0;}));
+  const albumLabel=Math.max(0,...[...[root,...all('[aria-label]',root)].map(e=>e.getAttribute('aria-label')||''),...buttons(root).map(label)].map(text=>{const m=String(text).match(/(?:^|\s)(\d{1,3})\s*(?:photos|images|ảnh)(?:\s|$)|(?:ảnh\/video|photo\/video|photos\/videos)[,:]?\s*(?:đã thêm|added)\s*(\d{1,3})|^(?:edit all|chỉnh sửa tất cả|sửa tất cả)\s*\(?(\d{1,3})\)?/i);return m?Number(m[1]||m[2]||m[3]):0;}));
   // Ô cuối mang nhãn "+N" đã nằm trong N (log thật: 5 ô + "+2" = 6 ảnh, 5 ô + "+6" = 10 ảnh).
   const total=Math.max(images+videos+(extra?extra-1:0),albumLabel);
   const loading=Boolean(all('[role="progressbar"]',root).length||/uploading|đang tải lên|processing video|đang xử lý video/i.test(root.innerText));
@@ -432,7 +435,7 @@ export async function facebookBot(action,payload={}){
     if(!captionMatches())throw Error('Ô soạn đã thay đổi trong thời gian chờ.');assertMedia();root=composer();
     b=await waitPublish();
     await checkActor();
-    const mediaProof=assertMedia(),audienceProof=checkAudiencePolicy();permission=await chrome.runtime.sendMessage({type:'bot-permit',jobId:payload.jobId,token:payload.token,mediaProof,audienceProof});if(permission?.data?.waitMs){let left=Math.min(10000,permission.data.waitMs);while(left>0){const part=Math.min(250,left);await sleep(part);left-=part;cancel();}}
+    const mediaProof=assertMedia(),audienceProof=checkAudiencePolicy();permission=await chrome.runtime.sendMessage({type:'bot-permit',jobId:payload.jobId,token:payload.token,mediaProof,audienceProof});if(permission?.data?.waitMs){let left=Math.min(120000,permission.data.waitMs);while(left>0){const part=Math.min(250,left);await sleep(part);left-=part;cancel();}}
    }while(permission?.data?.waitMs);
    if(!permission?.ok)throw Error(permission?.error||'Bot đã dừng hoặc lượt đăng đã được sử dụng.');
    const noticeLinks=()=>Array.from(document.querySelectorAll('[role="alert"] a[href],[role="status"] a[href],[aria-live="polite"] a[href],[aria-live="assertive"] a[href]'))
@@ -454,8 +457,25 @@ export async function facebookBot(action,payload={}){
    const publicProof=checkAudiencePolicy();globalThis.__deskSubmitAttempt={jobId:payload.jobId,token:payload.token,at:Date.now()};
    b.scrollIntoView({block:'center',inline:'nearest'});botClick(b);collect();void chrome.runtime.sendMessage({type:'bot-clicked',jobId:payload.jobId,token:payload.token}).catch(()=>{});return {ok:true,clicked:true,audienceProof:publicProof,uiDiagnostic:publishDiagnostic()};
   }
+  // 3.8.7: sau khi bấm Đăng, Facebook giữ hộp soạn ("Đang đăng…") tới khi gửi xong album/video rồi mới đóng.
+  // Hộp soạn đóng mà không có báo lỗi = Facebook đã nhận bài. Runner chỉ được rời trang sau bước này:
+  // bản cũ chuyển tab sang trang cá nhân để tìm link sau 12 giây, cắt ngang album/video còn đang gửi.
+  if(action==='published'){
+   cancel();const start=Date.now(),limit=Math.max(15000,Math.min(900000,Number(payload.timeoutMs)||120000));let closed=0;
+   const failure=/không thể đăng|chưa thể đăng|không đăng được|couldn.t (?:be )?(?:post|share)|can.t (?:post|share)|something went wrong|đã xảy ra lỗi|có lỗi xảy ra/i;
+   while(Date.now()-start<limit){
+    const restriction=globalThis.deskRestriction?.();if(restriction)throw Error(restriction);
+    const alert=all('[role="alert"],[role="alertdialog"],[role="dialog"]').find(e=>failure.test(e.innerText||''));
+    if(alert)throw Error('Facebook báo lỗi sau khi bấm Đăng: '+String(alert.innerText||'').replace(/\s+/g,' ').slice(0,160));
+    const review=globalThis.__deskReviewComposer;const busy=all('[role="dialog"],[role="status"],[role="alert"],[aria-live]').some(e=>/đang đăng|đang tải lên|đang xử lý video|posting|uploading|processing video/i.test(e.innerText||'')||(e.matches('[role="dialog"]')&&e.querySelector('[role="progressbar"]')));const open=busy||composerCandidates().length>0||Boolean(review?.root&&visible(review.root));
+    closed=open?0:closed+1;
+    if(closed>=4)return {ok:true,published:true,waitedMs:Date.now()-start};
+    await sleep(500);
+   }
+   return {ok:true,published:false,waitedMs:Date.now()-start};
+  }
   if(action==='verify'){
-   const wanted=norm(payload.text);
+   const wanted=flat(payload.text);const has=(el,part)=>flat(el?.innerText).includes(part);
    const prior=new Set(payload.prior||[]),clicked=new WeakSet();
    const start=Date.now();while(Date.now()-start<12000){
     const receipt=globalThis.__deskPostReceipt;
@@ -467,13 +487,13 @@ export async function facebookBot(action,payload={}){
      });
      if(fresh.length===1)return {ok:true,url:fresh[0],textMatch:true,authorMatch:true,source:'Thông báo Xem bài viết'};
     }
-    if(wanted.replace(/[\s\ufe0e\ufe0f]/gu,'').length<12){await sleep(200);continue;}
+    if(wanted.length<12){await sleep(200);continue;}
     // Facebook can materialize timestamp hrefs on hover. Expand only a matching author's post.
-    const roots=new Set(all('[role="article"],article'));for(const heading of all('h2,h3,h4,[role="heading"]')){let p=heading.parentElement;for(;p&&p!==document.body;p=p.parentElement){if(buttons(p).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;if(norm(p.innerText).includes(wanted.slice(0,80))&&buttons(p).some(e=>/actions for this post|hành động.*bài viết/i.test(label(e)))){roots.add(p);break;}}}
-    for(const root of roots){if(!norm(root.innerText).includes(wanted.slice(0,80)))continue;const author=all('a[href]',root).find(a=>norm(a.innerText)&&/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(a.href));if(!author||profile(author.href)!==profile(payload.actor.url)||norm(author.innerText)!==norm(payload.actor.name))continue;
-     if(!norm(root.innerText).includes(wanted)){const more=buttons(root).find(e=>/^(see more|xem thêm)$/i.test(label(e)));if(more)botClick(more);}
+    const roots=new Set(all('[role="article"],article'));for(const heading of all('h2,h3,h4,[role="heading"]')){let p=heading.parentElement;for(;p&&p!==document.body;p=p.parentElement){if(buttons(p).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;if(has(p,wanted.slice(0,80))&&buttons(p).some(e=>/actions for this post|hành động.*bài viết/i.test(label(e)))){roots.add(p);break;}}}
+    for(const root of roots){if(!has(root,wanted.slice(0,80)))continue;const author=all('a[href]',root).find(a=>norm(a.innerText)&&/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(a.href)&&profile(a.href)===profile(payload.actor.url));if(!author)continue;
+     if(!has(root,wanted)){const more=buttons(root).find(e=>/^(see more|xem thêm)$/i.test(label(e)));if(more)botClick(more);}
      for(const a of all('a[href]',root)){
-      if(a.hash.startsWith('#?')&&norm(root.innerText).includes(wanted)&&!clicked.has(a)&&
+      if(a.hash.startsWith('#?')&&has(root,wanted)&&!clicked.has(a)&&
         !a.closest('p,[data-ad-preview="message"]')&&
         (author.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING)&&
         all('a[href]',root).filter(link=>link.hash.startsWith('#?')).length===1){
@@ -485,9 +505,9 @@ export async function facebookBot(action,payload={}){
       }
       a.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));a.dispatchEvent(new MouseEvent('mouseenter',{bubbles:true}));}
     }
-    const candidates=[];for(const a of all('a[href]')){const url=canonical(a.href);if(!url||prior.has(url))continue;let root=a.closest('[role="article"],article');if(!root){let parent=a.parentElement;for(;parent&&parent!==document.body;parent=parent.parentElement){if(buttons(parent).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;const txt=norm(parent.innerText);if(txt.includes(wanted)&&buttons(parent).some(e=>/actions for this post|hành động.*bài viết|chỉnh sửa/i.test(label(e)))){root=parent;break;}}}
-     if(!root||!norm(root.innerText).includes(wanted))continue;
-     const authorLinks=all('a[href]',root).filter(l=>norm(l.innerText)&&(/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(l.href)));const firstAuthor=authorLinks[0];const author=firstAuthor&&profile(firstAuthor.href)===profile(payload.actor.url)&&norm(firstAuthor.innerText)===norm(payload.actor.name);if(!author)continue;
+    const candidates=[];for(const a of all('a[href]')){const url=canonical(a.href);if(!url||prior.has(url))continue;let root=a.closest('[role="article"],article');if(!root){let parent=a.parentElement;for(;parent&&parent!==document.body;parent=parent.parentElement){if(buttons(parent).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;if(has(parent,wanted)&&buttons(parent).some(e=>/actions for this post|hành động.*bài viết|chỉnh sửa/i.test(label(e)))){root=parent;break;}}}
+     if(!root||!has(root,wanted))continue;
+     const authorLinks=all('a[href]',root).filter(l=>norm(l.innerText)&&(/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(l.href)));const firstAuthor=authorLinks[0];const author=firstAuthor&&profile(firstAuthor.href)===profile(payload.actor.url);if(!author)continue;
      const header=firstAuthor.closest('h2,h3,h4,[role="heading"]');
      if(!header||!(header.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING)||a.closest('p,[data-ad-preview="message"],[data-ad-rendering-role="story_message"]'))continue;
      const menu=buttons(root).find(b=>/actions for this post|hành động.*bài viết|tùy chọn.*bài viết/i.test(label(b)));

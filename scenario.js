@@ -12,8 +12,17 @@ export function setManualCaption(post,text){
  if(post.text.trim()){post.captionPartial=false;post.captionEdited=true;}
  return post;
 }
+// 3.8.7: Post Research đôi khi ghi chữ của giao diện Facebook vào chỗ caption khi không đọc được caption thật
+// (Reel: "Facebook"; bài ảnh không caption: "của tác giả"). Không đăng các chữ này.
+const UI_CAPTION=/^(?:facebook|reels?|thước phim|videos?|watch|ảnh|photos?|bài viết|posts?|của tác giả|tác giả|author|âm thanh gốc|original audio|xem thêm|see more|xem bản dịch|see translation|theo dõi|follow|công khai|public|trực tiếp|live|đã chia sẻ|shared)$/i;
+export function isUiCaption(text){const t=String(text||'').normalize('NFC').replace(/[\s·•:|.,!-]+/g,' ').trim().toLowerCase();return Boolean(t)&&UI_CAPTION.test(t);}
 export function cleanCaption(post){
  post.captionPartial=isCaptionPartial(post.captionPartial);
+ if(!post.captionEdited&&isUiCaption(post.text)){
+  // Reel/video: caption thật có thể vẫn tồn tại, runner đọc lại qua Media Bridge trước khi đăng.
+  if(['reel','video'].includes(post.sourceKind)&&post.media?.some(m=>m.type==='video'&&m.manifest?.sourceUrl))post.captionSuspect=String(post.text).trim();
+  else{post.uiCaptionDropped=String(post.text).trim();post.text='';post.blocks=[];post.sourceCaption='';post.sourceCaptionState='no_caption';if(post.titleAuto!==false)post.title='';}
+ }
  if(!Array.isArray(post.blocks))post.blocks=[{runs:[{text:post.text||''}]}];
  if(typeof post.sourceCaption!=='string')post.sourceCaption=plainText(post);
  if(!post.sourceCaptionState)post.sourceCaptionState=post.sourceCaption.trim()?'present':'unreadable';
@@ -65,8 +74,8 @@ export function splitPosts(blocks,source){
   if(heading){current={id:source.key+':bai-'+heading[1],sourceKey:source.key,sourceUrl:source.url,number:Number(heading[1]),title:'',location:'',feeling:'',withPeople:'',time:'',blocks:[],comments:[],notes:[],media:[],sourceImageCount:0,state:'draft',createdAt:new Date().toISOString()};result.push(current);comments=false;pendingVideo=false;continue;}
   if(!current){if(text)preamble.push(text);continue;}
   if(!comments&&/^(timeline|lịch đăng|lịch trình|kế hoạch đăng)\s*:/i.test(text)){current.timelineText=(current.timelineText||'')+'\n'+text;continue;}
-  if(/^(?:Phần\s+)?(?:comment|bình luận)\s*:/i.test(text)){comments=true;const tail=text.replace(/^(?:Phần\s+)?(?:comment|bình luận)\s*:/i,'').trim();if(tail)current.comments.push(tail);continue;}
-  if(comments){if(/^(?:Liên kết hội thoại|Tình trạng hội thoại)\s*:/i.test(text))continue;if(text&&!/^[-—_]+$/.test(text))current.comments.push(text);continue;}
+  if(/^(?:Phần\s+)?(?:comment|bình luận)\s*:/i.test(text)){comments=true;const tail=text.replace(/^(?:Phần\s+)?(?:comment|bình luận)\s*:/i,'').trim();if(tail){current.comments.push(tail);(current.commentDepths??=[]).push(block.depth||0);}continue;}
+  if(comments){if(/^(?:Liên kết hội thoại|Tình trạng hội thoại)\s*:/i.test(text))continue;if(text&&!/^[-—_]+$/.test(text)){current.comments.push(text);(current.commentDepths??=[]).push(block.depth||0);}continue;}
   for(const r of block.runs||[])if(Object.hasOwn(r,'image')&&!r.emoji){current.sourceImageCount++;const url=imageSourceUrl(r.image);if(url)current.media.push({type:'image',url,caption:r.alt||''});else current.mediaReadError=true;}
   const meta=text.match(/^(Tiêu đề|Tiêu đều|Địa điểm|Cảm xúc|Với ai|Thời gian đăng)\s*:\s*([\s\S]*)$/i);
   if(meta){const names={'tiêu đề':'title','tiêu đều':'title','địa điểm':'location','cảm xúc':'feeling','với ai':'withPeople','thời gian đăng':'time'};current[names[meta[1].toLowerCase()]]=stripNote(meta[2],current.notes).trim();continue;}
@@ -92,7 +101,7 @@ export function splitPosts(blocks,source){
  if(!result.length)throw Error('Không thấy tiêu đề “Bài 1”, “Bài 2”… Kiểm tra thẻ Docs và quyền xem tài liệu.');const scheduleContext=preamble.join('\n');if(scheduleContext.length>20000)throw Error('Phần lịch chung quá dài; tách thành nguồn nhỏ hơn.');for(const p of result)p.scheduleContext=scheduleContext;return result;
 }
 function splitStructuredPosts(blocks,source){
- let section='',number=null;const body=[],comments=new Map(),sources=new Map(),manifests=new Map(),kinds=new Map(),captionStates=new Map(),captionChecks=new Map();
+ let section='',number=null;const body=[],comments=new Map(),commentDepths=new Map(),sources=new Map(),manifests=new Map(),kinds=new Map(),captionStates=new Map(),captionChecks=new Map();
  for(const b of blocks){const text=(b.runs||[]).map(r=>r.text||'').join('').trim();
   if(/^Phần 1\s*[–—-]\s*Bài viết$/i.test(text)){section='posts';number=null;continue;}
   if(/^Phần 2\s*[–—-]\s*Bình luận$/i.test(text)){section='comments';number=null;continue;}
@@ -106,12 +115,12 @@ function splitStructuredPosts(blocks,source){
    if(/^Media JSON\s*:/i.test(text)){let value;try{value=JSON.parse(text.replace(/^Media JSON\s*:\s*/i,''));}catch{throw Error('Media JSON bài '+number+' sai định dạng.');}if(value.schema!=='desk.media/1'||!['video','reel'].includes(value.kind)||!safeUrl(value.sourceUrl))throw Error('Media JSON bài '+number+' không hợp lệ.');manifests.set(number,value);continue;}
    body.push(b);
   }else if(section==='comments'){
-   const heading=text.match(/^Bình luận bài\s+(\d+)\s*$/i);if(heading){number=Number(heading[1]);if(!comments.has(number))comments.set(number,[]);continue;}
-   if(number&&text&&!/^(?:Liên kết hội thoại|Tình trạng hội thoại)\s*:/i.test(text))comments.get(number).push(text);
+   const heading=text.match(/^Bình luận bài\s+(\d+)\s*$/i);if(heading){number=Number(heading[1]);if(!comments.has(number)){comments.set(number,[]);commentDepths.set(number,[]);}continue;}
+   if(number&&text&&!/^(?:Liên kết hội thoại|Tình trạng hội thoại)\s*:/i.test(text)){comments.get(number).push(text);commentDepths.get(number).push(b.depth||0);}
   }
  }
  const posts=splitPosts(body,source);
- for(const p of posts){p.contentSchema=2;p.sourceCaptionState=p.sourceCaption?.trim()?'present':captionStates.get(p.number)||'unreadable';p.captionPartial=isCaptionPartial(captionChecks.get(p.number)?.partial);p.captionEvidence=String(captionChecks.get(p.number)?.evidence||'');p.comments=comments.get(p.number)||[];p.sourcePostUrl=sources.get(p.number)||'';p.sourceKind=kinds.get(p.number)||'post';const manifest=manifests.get(p.number);if(manifest){p.sourceKind=manifest.kind;p.media.push({id:p.id+':video-json',type:'video',url:manifest.sourceUrl,manifest});p.missingVideo=false;}else if(['video','reel'].includes(p.sourceKind))p.missingVideo=true;cleanCaption(p);fillMissingContent(p);}
+ for(const p of posts){p.contentSchema=2;p.sourceCaptionState=p.sourceCaption?.trim()?'present':captionStates.get(p.number)||'unreadable';p.captionPartial=isCaptionPartial(captionChecks.get(p.number)?.partial);p.captionEvidence=String(captionChecks.get(p.number)?.evidence||'');p.comments=comments.get(p.number)||[];p.commentDepths=commentDepths.get(p.number)||[];p.sourcePostUrl=sources.get(p.number)||'';p.sourceKind=kinds.get(p.number)||'post';const manifest=manifests.get(p.number);if(manifest){p.sourceKind=manifest.kind;p.media.push({id:p.id+':video-json',type:'video',url:manifest.sourceUrl,manifest});p.missingVideo=false;}else if(['video','reel'].includes(p.sourceKind))p.missingVideo=true;cleanCaption(p);fillMissingContent(p);}
  for(const n of comments.keys())if(!posts.some(p=>p.number===n))throw Error('Bình luận bài '+n+' không có bài tương ứng trong Phần 1.');
  return posts;
 }
@@ -133,7 +142,10 @@ export function htmlBlocks(html){
   if(tag==='A'){let link=node.getAttribute('href')||'';try{const u=new URL(link);if(u.hostname==='www.google.com'&&u.pathname==='/url')link=u.searchParams.get('q')||link;}catch{}if(safeUrl(link))next.link=link;}
   return [...node.childNodes].flatMap(n=>walk(n,next));
  };
- return [...doc.body.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,img')].filter(el=>!el.parentElement.closest('p,h1,h2,h3,h4,h5,h6,li')).map(el=>({runs:walk(el)}));
+ // 3.8.7: giữ thụt lề đoạn văn. Post Research thụt 18pt cho mỗi cấp phản hồi (comment gốc 0, reply 1, reply của reply 2);
+ // bỏ thụt lề thì mọi phản hồi thành comment gốc.
+ const indent=el=>{let pt=0;for(const m of getStyle(el).matchAll(/(?:margin|padding)-left:\s*(-?[\d.]+)(pt|px)/g))pt=Math.max(pt,Number(m[1])*(m[2]==='px'?0.75:1));return pt>=9?Math.round(pt/18):0;};
+ return [...doc.body.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,img')].filter(el=>!el.parentElement.closest('p,h1,h2,h3,h4,h5,h6,li')).map(el=>{const depth=el.tagName==='P'?indent(el):0;return depth?{runs:walk(el),depth}:{runs:walk(el)};});
 }
 export function applyAI(original,data){
  if(!data||!Array.isArray(data.paragraphs)||data.paragraphs.length>1000)throw Error('Gemini trả cấu trúc bài không hợp lệ.');

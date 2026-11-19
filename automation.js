@@ -5,8 +5,8 @@ import {sweepWorkTabs,openWorkTab,closeWorkTab} from './work-tabs.js';
 import {findPublished} from './published-link.js';
 import {resetCandidate,resetCopy,botDefaults,createJob,dueJob,canonicalPost,publicJob,terminalStates} from './automation-model.js';
 import {facebookBot} from './facebook-bot.js';
-import {fbUrl,docsSource} from './scenario.js';
-import {planningInput,needsScheduleAI,directPlan,validatePlan,assignSlots,canClaim,advanceDefaultQueue,DEFAULT_INTERVAL_MINUTES,DEFAULT_GAP_MS} from './posting-plan.js';
+import {fbUrl,docsSource,cleanCaption,fillMissingContent} from './scenario.js';
+import {planningInput,needsScheduleAI,directPlan,validatePlan,assignSlots,canClaim,submitWaitMs,advanceDefaultQueue,DEFAULT_INTERVAL_MINUTES,DEFAULT_GAP_MS} from './posting-plan.js';
 export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,mediaRelease,planAI,chooseAI}){
  const transfers=new Map();
  async function pause(){
@@ -60,10 +60,14 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
   lookupBusy=true;
   try {
    const d=await db();
-   const pending=j=>j.submittedAt && ['unknown','partial'].includes(j.state) && !j.postUrl;
-   const short=j=>String(j.post.text||'').normalize('NFKC').replace(/[\s\u200b-\u200f\u034f\ufe0e\ufe0f]/gu,'').length<12;
+   // 3.8.7: tìm link chạy trong cùng khóa với runner và mở tab Facebook ~35 giây/bài. Bản cũ chạy mỗi phút,
+   // tối đa 3 bài/lượt, làm runner phải chờ và đẩy nhịp 3 phút lên 5-8 phút. Nay chỉ tìm khi không có bài
+   // nào đang chạy hoặc sắp tới lượt trong 4 phút, và mỗi lượt chỉ 1 bài.
+   if(!jobId){const b0=bot(d),now0=Date.now();if(b0.jobs.some(j=>active(j)||(j.state==='queued'&&runnable(b0,j)&&Date.parse(j.dueAt)-now0<240000)))return;}
+   const pending=j=>j.submittedAt && (['unknown','partial'].includes(j.state)||(j.state==='success'&&j.verification?.published&&(j.lookupAttempts||0)<4)) && !j.postUrl;
+   const short=j=>String(j.post.text||'').normalize('NFKC').replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\p{Default_Ignorable_Code_Point}\s]/gu,'').toLowerCase().length<2;
    const due=bot(d).jobs.filter(j=>pending(j)&&(jobId||!short(j)||j.receiptLinks?.length===1)&&(jobId?j.id===jobId:(!j.lookupAt||Date.now()>=(j.nextLookup||0))))
-    .sort((a,b)=>(a.lookupAt||0)-(b.lookupAt||0)).slice(0,jobId?1:3);
+    .sort((a,b)=>(a.lookupAt||0)-(b.lookupAt||0)).slice(0,1);
    let lookupTab;
    try{for(const j of due){
     let proof,reason;
@@ -79,7 +83,7 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
     const fresh=await db(),current=job(fresh,j.id);
     if(!pending(current))return;
     current.lookupAt=Date.now();
-    if(!proof){current.lookupAttempts=(current.lookupAttempts||0)+1;current.nextLookup=Date.now()+Math.min(3,current.lookupAttempts)*60000;current.error=reason;await write(fresh);return;}
+    if(!proof){current.lookupAttempts=(current.lookupAttempts||0)+1;current.nextLookup=Date.now()+Math.min(3,current.lookupAttempts)*60000;if(current.state!=="success")current.error=reason;await write(fresh);return;}
     if(bot(fresh).jobs.some(other=>other.id!==current.id && other.postUrl===proof.url && other.postId!==current.postId)){
      current.error='Link này đã thuộc bài khác.';current.nextLookup=Date.now()+3*60000;await write(fresh);return;
     }
@@ -213,10 +217,33 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
   });
   if(msg.type==='bot-waiting-submit')return lock(async()=>{const d=await db(),b=bot(d),j=job(d,msg.jobId);if(sender.tab?.id!==j.facebookTabId||msg.token!==j.token||!b.enabled||j.state!=='running'||j.submittedAt)throw Error('Lượt chờ đăng không còn hiệu lực.');const until=Date.now()+Math.max(0,Math.min(60000,Number(msg.waitMs)||0));if(j.stage!=='waiting-submit'||Math.abs((j.waitUntil||0)-until)>500){j.stage='waiting-submit';j.waitUntil=until;j.heartbeatAt=new Date().toISOString();await write(d);}return true;});
   if(msg.type==='bot-clicked')return lock(async()=>{const d=await db(),j=job(d,msg.jobId);if(sender.tab?.id!==j.facebookTabId||msg.token!==j.token||j.state!=='verifying'||!j.submittedAt)throw Error('Không xác nhận được lượt bấm.');if(!j.clickDispatchedAt){j.clickDispatchedAt=new Date().toISOString();j.stage='click-dispatched';await write(d);}return true;});
-  if(msg.type==='bot-permit')return lock(async()=>{const d=await db(),b=bot(d),j=job(d,msg.jobId);if(sender.tab?.id!==j.facebookTabId||msg.token!==j.token||!b.enabled||j.state!=='running'||j.submittedAt)throw Error('Không cấp lượt đăng: sai tab, bot đã dừng hoặc đã dùng lượt.');const {deskPersonas}=await chrome.storage.local.get('deskPersonas');const checked=filterCaptionName(structuredClone(j.post),deskPersonas,d.sources,j.actor);if(checked.count)throw Error('Bộ lọc tên: caption vẫn còn tên tài khoản gốc; dừng trước khi đăng.');const expected=j.expectedMedia||j.post.media.map(m=>m.type),proof=msg.mediaProof;if(!proof||proof.jobId!==j.id||proof.token!==j.token||proof.count!==expected.length||proof.images!==expected.filter(t=>t==='image').length||proof.videos!==expected.filter(t=>t==='video').length||(expected.length&&(!j.mediaProofId||proof.proofId!==j.mediaProofId)))throw Error('Dừng an toàn: bộ điều khiển chưa xác nhận đủ media. Không đăng riêng caption.');if(!msg.audienceProof||msg.audienceProof.jobId!==j.id||msg.audienceProof.token!==j.token||!['default','public'].includes(msg.audienceProof.mode))throw Error('Chưa xác nhận chế độ đối tượng cho lượt đăng.');j.state='verifying';j.stage='submit-recorded';j.submittedAt=new Date().toISOString();j.heartbeatAt=j.submittedAt;await write(d);return true;});
+  if(msg.type==='bot-permit')return lock(async()=>{const d=await db(),b=bot(d),j=job(d,msg.jobId);if(sender.tab?.id!==j.facebookTabId||msg.token!==j.token||!b.enabled||j.state!=='running'||j.submittedAt)throw Error('Không cấp lượt đăng: sai tab, bot đã dừng hoặc đã dùng lượt.');const {deskPersonas}=await chrome.storage.local.get('deskPersonas');const checked=filterCaptionName(structuredClone(j.post),deskPersonas,d.sources,j.actor);if(checked.count)throw Error('Bộ lọc tên: caption vẫn còn tên tài khoản gốc; dừng trước khi đăng.');const expected=j.expectedMedia||j.post.media.map(m=>m.type),proof=msg.mediaProof;if(!proof||proof.jobId!==j.id||proof.token!==j.token||proof.count!==expected.length||proof.images!==expected.filter(t=>t==='image').length||proof.videos!==expected.filter(t=>t==='video').length||(expected.length&&(!j.mediaProofId||proof.proofId!==j.mediaProofId)))throw Error('Dừng an toàn: bộ điều khiển chưa xác nhận đủ media. Không đăng riêng caption.');if(!msg.audienceProof||msg.audienceProof.jobId!==j.id||msg.audienceProof.token!==j.token||!['default','public'].includes(msg.audienceProof.mode))throw Error('Chưa xác nhận chế độ đối tượng cho lượt đăng.');const waitMs=submitWaitMs(j,b.jobs);if(waitMs>0){j.stage='waiting-submit';j.waitUntil=Date.now()+waitMs;j.heartbeatAt=new Date().toISOString();await write(d);return {waitMs};}j.state='verifying';j.stage='submit-recorded';j.submittedAt=new Date().toISOString();j.heartbeatAt=j.submittedAt;await write(d);return true;});
   if(msg.type==='bot-abort-before-click')return lock(async()=>{const d=await db(),j=job(d,msg.jobId);if(sender.tab?.id!==j.facebookTabId||msg.token!==j.token||j.state!=='verifying'||j.clickDispatchedAt||j.receiptLinks?.length)throw Error('Không thể hủy lượt đã gửi.');j.state='running';j.submittedAt=null;j.stage='blocked-before-click';j.error=String(msg.reason||'Media biến mất trước khi bấm Đăng.').slice(0,1000);await write(d);return true;});
   if(msg.type.startsWith('runner-')&&!isRunner)throw Error('Chỉ trang chạy bot được gọi thao tác này.');
   if(msg.type==='runner-claim')return lock(async()=>{const d=await db(),b=bot(d);if(!b.enabled||b.jobs.some(active))return null;if(useThreeMinuteSchedule(b))await write(d);const j=b.jobs.filter(j=>j.state==='queued'&&!(j.attempt>1&&j.lastFailure)&&runnable(b,j)&&canClaim(j,b.jobs)).sort((a,b)=>Number(b.scheduleMode==='now')-Number(a.scheduleMode==='now')||Date.parse(a.dueAt)-Date.parse(b.dueAt))[0];if(!j)return null;const {deskPersonas}=await chrome.storage.local.get('deskPersonas');const latest=d.posts.find(p=>p.id===j.postId);if(latest?.captionNameFilter?.status==='blocked'){j.stage='finished';recordOutcome(d,j,'failed',latest.captionNameFilter.message);await write(d);return null;}try{j.post.captionNameFilter=filterCaptionName(j.post,deskPersonas,d.sources,j.actor);}catch(error){j.stage='finished';recordOutcome(d,j,'failed',error.message);await write(d);return null;}j.state='running';j.stage='opening';j.startedAt=new Date().toISOString();j.heartbeatAt=j.startedAt;j.runnerTabId=sender.tab?.id;await write(d);return structuredClone(j);});
+  // 3.8.7: caption trong Docs là chữ giao diện (vd. "Facebook") ở bài Reel/video: đọc caption công khai qua Media Bridge.
+  if(msg.type==='runner-caption'){
+   const d0=await db(),j0=job(d0,msg.jobId);
+   if(msg.token!==j0.token||j0.runnerTabId!==sender.tab?.id||j0.state!=='running')throw Error('Bot đã dừng.');
+   const video=(j0.post.media||[]).find(m=>m.type==='video'&&m.manifest?.sourceUrl),wrong=j0.post.captionSuspect||j0.post.text;
+   if(!video)throw Error('Caption nguồn ghi nhầm "'+wrong+'" và bài không có link video để đọc lại caption.');
+   let info;
+   try{const r=await fetch('http://127.0.0.1:47833/probe',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema:'desk.media/1',kind:video.manifest.kind==='reel'?'reel':'video',sourceUrl:video.manifest.sourceUrl}),signal:AbortSignal.timeout(90000)});if(!r.ok)throw Error('HTTP '+r.status);info=await r.json();}
+   catch(error){throw Error('Caption nguồn ghi nhầm "'+wrong+'"; chưa đọc lại được caption qua Media Bridge ('+error.message+'). Bấm Start Video rồi chạy lại bài.');}
+   if(!info?.captionKnown)throw Error('Caption nguồn ghi nhầm "'+wrong+'"; Media Bridge chưa đọc được caption công khai của video. Sửa caption trong Docs rồi chạy lại.');
+   return lock(async()=>{const d=await db(),j=job(d,msg.jobId);
+    if(msg.token!==j.token||j.state!=='running')throw Error('Bot đã dừng.');
+    const text=String(info.caption||'').trim();
+    for(const target of [j.post,d.posts.find(p=>p.id===j.postId)].filter(Boolean)){
+     Object.assign(target,{text,blocks:text?[{runs:[{text}]}]:[],sourceCaption:text,sourceCaptionState:text?'present':'no_caption',captionEvidence:'media-bridge',captionPartial:false,uiCaptionDropped:wrong});
+     delete target.captionSuspect;cleanCaption(target);fillMissingContent(target);
+    }
+    const {deskPersonas}=await chrome.storage.local.get('deskPersonas');
+    j.post.captionNameFilter=filterCaptionName(j.post,deskPersonas,d.sources,j.actor);
+    event(d,j.post,'running','Caption nguồn ghi nhầm "'+wrong+'": đã đọc lại caption công khai'+(text?'.':' (bài gốc không có caption).'));
+    await write(d);return structuredClone(j.post);
+   });
+  }
   if(msg.type==='runner-touch'||msg.type==='runner-progress')return lock(async()=>{const d=await db(),b=bot(d),j=job(d,msg.jobId);if(msg.token!==j.token||j.runnerTabId!==sender.tab?.id||!active(j))throw Error('Lượt chạy không còn hiệu lực.');j.heartbeatAt=new Date().toISOString();if(msg.type==='runner-progress'){j.stage=String(msg.stage||'').slice(0,80);if(msg.facebookTabId){const t=await chrome.tabs.get(msg.facebookTabId);fbUrl(t.url);j.facebookTabId=msg.facebookTabId;}if(msg.evidence){j.evidence.push(msg.evidence);if(msg.evidence.type==='media'&&msg.evidence.count===(j.expectedMedia||j.post.media).length&&typeof msg.evidence.proofId==='string')j.mediaProofId=msg.evidence.proofId;}if(msg.prior)j.prior=msg.prior;}await write(d);return {enabled:b.enabled,submitted:!!j.submittedAt};});
   if(msg.type==='runner-media-chunk'||msg.type==='runner-media-release'){
    const d=await db(),j=job(d,msg.jobId);if(msg.token!==j.token||j.runnerTabId!==sender.tab?.id)throw Error('Bot đã dừng.');
@@ -233,7 +260,7 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
     Object.assign(j,{state:'queued',stage:'retry',autoRetried:true,previousError:String(msg.result.message||'').slice(0,1000),token:crypto.randomUUID(),dueAt:new Date(Date.now()+90000).toISOString(),runnerTabId:null,facebookTabId:null,resumeFacebookTabId:null,resumeDraftText:null,mediaProofId:null,evidence:[],error:''});
     const p=d.posts.find(p=>p.id===j.postId);if(p)p.state='queued';
     event(d,j.post,'queued','Tự thử lại sau lỗi trước khi đăng: '+String(msg.result.message||'').slice(0,300));await write(d);return {state:'queued'};
-   }const url=canonicalPost(msg.result.url);if(!terminalStates.includes(state))throw Error('Trạng thái không hợp lệ.');if(state==='success'&&(!j.submittedAt||!url||!msg.result.textMatch||!msg.result.authorMatch||(j.backdate&&!msg.result.dateVerified)))throw Error('Thiếu bằng chứng đăng thành công.');if(j.submittedAt&&['failed','cancelled'].includes(state))state='unknown';j.postUrl=url;j.verification=msg.result;j.stage='finished';b.lastFinishedAt=Date.now();recordOutcome(d,j,state,String(msg.result.message||'Bot đã đăng và xác minh link.'),b.lastFinishedAt);await write(d);return {state:j.state};});
+   }const url=canonicalPost(msg.result.url);if(!terminalStates.includes(state))throw Error('Trạng thái không hợp lệ.');if(state==='success'&&(!j.submittedAt||(url?(!msg.result.textMatch||!msg.result.authorMatch):msg.result.published!==true)||(j.backdate&&!msg.result.dateVerified)))throw Error('Thiếu bằng chứng đăng thành công.');if(j.submittedAt&&['failed','cancelled'].includes(state))state='unknown';j.postUrl=url;j.verification=msg.result;j.stage='finished';b.lastFinishedAt=Date.now();recordOutcome(d,j,state,String(msg.result.message||'Bot đã đăng và xác minh link.'),b.lastFinishedAt);await write(d);return {state:j.state};});
   return undefined;
  }
  return {handle,heartbeat,ensureRunner,pause};

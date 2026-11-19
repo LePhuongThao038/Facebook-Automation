@@ -8,7 +8,9 @@ import {waitFacebookTab} from './tab-ready.js';
 // có thể là profile.php, /people/... hoặc tên rút gọn. Bản cũ chỉ nhận "#?..." hoặc link bài sẵn có,
 // và đòi đúng cả link lẫn tên tác giả, nên bài đã lên vẫn bị ghi "cần đối soát".
 export function inspectPost(request) {
- const clean = value => String(value || '').normalize('NFKC').replace(/[\s​-‏‪-‮⁦-⁩͏︎️]/gu,'').toLowerCase();
+ // 3.8.7: bỏ cả emoji khi so khớp. Facebook hiển thị emoji bằng <img alt>, innerText không có emoji,
+ // nên caption có emoji (gần như mọi bài) luôn báo "khớp chữ=0" và kẹt ở Cần đối soát.
+ const clean = value => String(value || '').normalize('NFKC').replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\p{Default_Ignorable_Code_Point}\s]/gu,'').toLowerCase();
  const person = href => {
   try{
    const url = new URL(href,location.href);
@@ -21,7 +23,9 @@ export function inspectPost(request) {
  const postLink = href => /\/posts\/|story_fbid=|\/videos\/|\/reel\//.test(href||'');
  const visible = el => el.getClientRects().length > 0;
  const wanted = clean(request.text);
- if (wanted.length<12) return {};
+ if (wanted.length<2) return {};
+ // Caption ngắn: chỉ nhận khi đoạn chữ của bài trùng KHỚP HOÀN TOÀN, tránh nhận nhầm bài khác.
+ const short = wanted.length<12;
  const head = wanted.slice(0,Math.min(55,wanted.length));
  const actorKey=person(request.actor.url), actorName=clean(request.actor.name);
  const saved=globalThis.__deskCheckedTimestamp;
@@ -39,6 +43,7 @@ export function inspectPost(request) {
    const headingLinks=[...root.querySelectorAll('h2 a[href],h3 a[href],h4 a[href],[role="heading"] a[href],strong a[href]')];
    const author = headingLinks.find(a => person(a.href)===actorKey) || headingLinks.find(a => clean(a.innerText)===actorName) || links.find(a=>clean(a.innerText)===actorName&&!message(a));
    if (!author) break;
+   if (short && ![...root.querySelectorAll('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')].some(el=>clean(el.innerText)===wanted)) break;
    diag.author++;
    const more = [...root.querySelectorAll('button,[role="button"]')].find(el => /^(see more|xem thêm)$/i.test(el.innerText.trim()));
    if (more && !more.dataset.deskExpanded && !clean(root.innerText).includes(wanted)){more.dataset.deskExpanded='1';more.click();return {expanding:true,diag};}
@@ -77,7 +82,7 @@ export function inspectPost(request) {
 }
 
 export async function findPublished(job, existingTabId) {
- if(String(job.post.text||'').normalize('NFKC').replace(/[\s​-‏͏︎️]/gu,'').length<12)throw Error('Chưa nhận được link Xem bài viết. Nội dung ngắn hoặc chỉ có media; không tự đăng lại.');
+ if(String(job.post.text||'').normalize('NFKC').replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\p{Default_Ignorable_Code_Point}\s]/gu,'').toLowerCase().length<2)throw Error('Chưa nhận được link Xem bài viết. Bài chỉ có media; không tự đăng lại.');
  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const url=fbUrl(job.actor.url);
  const tab=Number.isInteger(existingTabId)

@@ -15,8 +15,9 @@ export function registryFromSheet(values){
  return {registry:validateRegistry({schema:'desk.personas/1',registryId:'sheet-18xjHAiV-personas-v1',revision:0,profiles,relations}),missing};
 }
 const roles=new Map([['tác giả','author'],['đàn em nam','junior_male'],['đàn em nữ','junior_female'],['đàn em','junior'],['đàn anh','senior_male'],['đàn chị','senior_female'],['bạn nam','male_friend'],['bạn nữ','female_friend'],['sư phụ','mentor'],['người lớn tuổi','elder_relative'],['người thân bậc trên','elder_relative'],['khách hàng','customer']]);
-export function parseCommentLines(lines){
- const parsed=[];for(let i=0;i<(lines||[]).length;i++){
+// 3.8.7: depths[i] là cấp thụt lề của dòng i trong Docs (0 = comment gốc). Reply cấp d gắn vào dòng gần nhất phía trên có cấp d-1.
+export function parseCommentLines(lines,depths=[]){
+ const parsed=[],lastAt=[];for(let i=0;i<(lines||[]).length;i++){
   const raw=lines[i],line=String(typeof raw==='string'?raw:raw?.line||raw?.text||'').replace(/\u000b/g,'\n').trim();if(!line)continue;
   const match=line.match(/^([^:：\n]+)[:：]\s*([\s\S]*)$/);if(!match){if(parsed.length)parsed.at(-1).text+='\n'+line;continue;}
   const header=match[1].trim(),name=header.match(/^(.*?)\s*\((.*)\)\s*$/),tag=(name?.[1]||header).replace(/\s+\d+\s*$/,'').trim();
@@ -24,6 +25,9 @@ export function parseCommentLines(lines){
   if(!role&&!originalName)continue;
   const text=match[2].replace(/^của tác giả(?:\s*\n|\s*$)/i,'').trim();
   parsed.push({id:'dong-'+(i+1),index:i,role,tag,slot:name?.[1]||header,originalName,text,partial:/(?:xem thêm|see more)\s*$/i.test(text),parentId:typeof raw==='object'?raw.parentId||'':'',parentOriginalName:typeof raw==='object'?raw.parentOriginalName||'':''});
+  const depth=Math.max(0,Math.min(10,Number(depths?.[i])||0)),entry=parsed.at(-1);entry.depth=depth;
+  if(depth&&!entry.parentId&&!entry.parentOriginalName)entry.parentId=lastAt[depth-1]||'';
+  lastAt[depth]=entry.id;lastAt.length=depth+1;
  }
  return parsed;
 }
@@ -47,7 +51,7 @@ export function buildCrossScripts(registry,posts,{uid='',snapshots={},bindings={
  const ready=r.profiles.filter(p=>readiness(p).ready),byName=name=>r.profiles.filter(p=>[p.alias,p.name,p.source?.originalName].some(v=>v&&norm(v)===norm(name)));
  const slotName=entry=>norm(entry.slot)+(entry.role!=='author'&&!/\d$/.test(norm(entry.slot))?' 1':'');
  const ownersFor=post=>{const source=docId(post.sourceUrl)||String(post.sourceKey||'').split(':')[0];return r.profiles.filter(p=>docId(p.source?.docsUrl)===source);};
- const entriesFor=post=>{const source=docId(post.sourceUrl)||String(post.sourceKey||'').split(':')[0];return parseCommentLines(post.comments?.length?post.comments:snapshots[source]?.comments?.[post.number]||[]);};
+ const entriesFor=post=>{const source=docId(post.sourceUrl)||String(post.sourceKey||'').split(':')[0];return parseCommentLines(post.comments?.length?post.comments:snapshots[source]?.comments?.[post.number]||[],post.comments?.length?post.commentDepths:[]);};
  const fitsRole=(p,author,role)=>{const relation=r.relations.find(rel=>rel.from===p.id&&rel.to===author.id);return !!relation&&(role==='customer'||(role==='junior'?relation.role.startsWith('junior_'):relation.role===role));};
  // Reserve a UID for each numbered role once, across all posts of this author.
  // An unnumbered role is slot 1, not a new person. Existing assignments never rotate.
@@ -59,7 +63,7 @@ export function buildCrossScripts(registry,posts,{uid='',snapshots={},bindings={
  for(const post of posts){
   const source=docId(post.sourceUrl)||String(post.sourceKey||'').split(':')[0];const owners=r.profiles.filter(p=>docId(p.source?.docsUrl)===source);if(owners.length!==1){issues.push({postId:post.id,code:'source-owner',reason:'Docs chưa gắn duy nhất một clone trong Sheet.'});continue;}
   const author=owners[0];if(uid&&author.uid!==uid)continue;if(!readiness(author).ready){issues.push({postId:post.id,code:'author-not-ready',reason:'Clone tác giả thiếu UID/hồ sơ.'});continue;}
-  const fallback=snapshots[source]?.comments?.[post.number];const entries=parseCommentLines(post.comments?.length?post.comments:fallback||[]),steps=[],used=new Map(),resolved=new Map();
+  const fallback=snapshots[source]?.comments?.[post.number];const entries=parseCommentLines(post.comments?.length?post.comments:fallback||[],post.comments?.length?post.commentDepths:[]),steps=[],used=new Map(),resolved=new Map();
   for(const entry of entries){
    const issue=(code,reason)=>issues.push({postId:post.id,postNumber:post.number,author:author.alias,line:entry.index+1,stepId:entry.id,text:entry.text,parents:code==='unknown-author-parent'?steps.map(s=>({id:s.id,actorId:s.actorId,text:s.text})):undefined,role:entry.tag,originalName:entry.originalName,code,reason});
    if(!entry.text){issue('empty-comment','Chỉ có nhãn giao diện hoặc nội dung trống.');continue;}if(entry.partial){issue('partial-comment','Comment nguồn còn Xem thêm; chưa đủ nguyên văn.');continue;}
