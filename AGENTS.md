@@ -31,6 +31,10 @@ Post Research 0.2.23 (`post-research/`, extension riêng), kiểm tra trên bài
 - **Caption lấy nhầm comment:** phản hồi dạng "X đáp lại phản hồi của Y" giờ được nhận là comment.
 - **Thông tin nhân vật:** tên chủ trang lấy từ tiêu đề trang thay vì thẻ h1 đầu tiên (đã gây ra "Tên: Hoàng Quốc Việt"). **Chưa kiểm chứng** trên trang cá nhân thật, vì nick dùng để kiểm tra bị Facebook chặn xem trang cá nhân.
 
+**Quy tắc phiên bản:** chỉ tăng số phiên bản sau khi vấn đề người dùng báo đã được xác nhận khắc phục. Đang sửa thì giữ nguyên số.
+
+Post Research 0.2.25 (chưa tăng số, chờ người dùng xác nhận Docs mới): **cây bình luận dựng lại theo đúng thứ tự trên trang** mỗi lượt đọc; giới hạn tính theo số comment GỐC; luôn mở mọi "Xem N câu trả lời / Xem 1 phản hồi" của các comment gốc được lấy. Bản trước ngừng mở phản hồi khi đủ N comment, và nối phản hồi vào cuối danh sách. Đã kiểm tra trên bài thật của Giang: chuỗi Ngô Mai Phương ↔ Tác giả ra đủ 5 cấp, đúng thứ tự.
+
 Post Research 0.2.25, **kiểm tra trên trang cá nhân thật của Nguyễn Tùng Giang**: trang không có thẻ h1 và tiêu đề chỉ là "Facebook", nên bản cũ không đọc được tên, kéo theo mất avatar. Nay tên lấy từ nhãn avatar lớn ở đầu trang. Biệt danh, hạng mục và ngày tham gia lấy từ hộp "Giới thiệu về …", mở bằng cách bấm vào tên rồi đóng lại. Kết quả: Tên, Biệt danh "Giang", Mô tả "Người sáng tạo nội dung số", Sống tại, Avatar và Ảnh bìa đều có. Ngày sinh và tình trạng hôn nhân của trang này không công khai.
 
 Post Research 0.2.24: đọc **Biệt danh**, mô tả kiểu "Người sáng tạo nội dung số", và avatar không còn bắt buộc nằm trước thẻ tên (chọn ảnh lớn nhất có nhãn trùng tên hoặc "ảnh đại diện"). Gộp thêm 2 cải tiến từ bản `E:\HQV\Post-Research-0_2_22` (16/11, một bản 0.2.22 **khác** bản trong repo): ảnh bìa cỡ gốc, và chỉ nhận đúng ảnh đại diện hiện tại. Lưu ý: từng có 2 bản cùng tên 0.2.22; bản trong repo là bản đã gộp cả hai.
