@@ -6,7 +6,13 @@ function parse(raw){let s=raw.trim().replaceAll('\\','');if(!/^https?:\/\//i.tes
 async function run(fn){if(busy)return;busy=true;activity.start();document.querySelectorAll('button').forEach(x=>x.disabled=true);try{await fn()}catch(e){status('Chưa hoàn tất: '+e.message);activity.fail(e.message)}finally{activity.finish();busy=false;document.querySelectorAll('button').forEach(x=>x.disabled=false)}}
 async function openFB(url){activity.progress('Đang mở trang Facebook…');let t;if(tabId){try{t=await chrome.tabs.update(tabId,{url,active:false})}catch{}}if(!t)t=await chrome.tabs.create({url,active:false});tabId=t.id;for(let i=0;i<90;i++){await sleep(250);let q=await chrome.tabs.get(t.id);if(q.status==='complete'&&q.url&&q.url!=='about:blank')break}await sleep(1300)}
 const captionSnapshots=new Map();
-async function scan(mode, quota){const target={tabId};await chrome.scripting.executeScript({target,files:['caption.js','scan.js']});let [r]=await chrome.scripting.executeScript({target,func:async (m,n,k,id)=>{try{return {data:await globalThis.researchScan(m,n===null?Infinity:n,k,id)}}catch(e){return {error:e.message}}},args:[mode,quota??commentLimit(),mode.startsWith("profile")?[...pending.keys()]:[],mode==="profile"?liveScanId:null]});if(!r?.result||r.result.error)throw Error(r?.result?.error||'Không đọc được trang Facebook.');return r.result.data}
+// Tab chạy nền: Chrome ngừng vẽ trang nên Facebook không hiện các câu trả lời vừa tải ("Xem N câu trả lời"),
+// bản quét chỉ thấy vỏ ngoài. Khi đọc từng bài, đưa tab Facebook lên trước rồi trả lại tab Sổ nghiên cứu.
+async function scan(mode, quota){if(mode==='post')return withVisibleTab(()=>scanInTab(mode,quota));return scanInTab(mode,quota)}
+async function withVisibleTab(work){let home;try{home=await chrome.tabs.getCurrent()}catch{}
+ try{const t=await chrome.tabs.get(tabId);await chrome.tabs.update(tabId,{active:true});const w=await chrome.windows.get(t.windowId);if(w.state==='minimized')await chrome.windows.update(w.id,{state:'normal'});await sleep(600)}catch{}
+ try{return await work()}finally{if(home?.id)await chrome.tabs.update(home.id,{active:true}).catch(()=>{})}}
+async function scanInTab(mode, quota){const target={tabId};await chrome.scripting.executeScript({target,files:['caption.js','scan.js']});let [r]=await chrome.scripting.executeScript({target,func:async (m,n,k,id)=>{try{return {data:await globalThis.researchScan(m,n===null?Infinity:n,k,id)}}catch(e){return {error:e.message}}},args:[mode,quota??commentLimit(),mode.startsWith("profile")?[...pending.keys()]:[],mode==="profile"?liveScanId:null]});if(!r?.result||r.result.error)throw Error(r?.result?.error||'Không đọc được trang Facebook.');return r.result.data}
 let liveScanId=null;
 function receivePreviews(rows) {
   for(const {url,title,body,captionPartial} of rows) {
