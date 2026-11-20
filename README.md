@@ -7,6 +7,8 @@
 > ```
 > Đường dẫn đang nạp xem ở `chrome://extensions` → Chi tiết → "Đã tải từ". Nếu đã lỡ cài ra ID mới, chạy `Install-Start-Video.cmd` với ID mới (script giờ ghép ID vào cả `media-native-host.json` và `media-bridge-config.json`).
 
+> **Bản vá Media Bridge tự đăng ký:** sau khi chạy `Install-Start-Video.cmd` một lần để đăng ký protocol `fbdesk-install`, nút "Bật lại tự động hóa" có thể tự mở trình cài cục bộ khi extension ID chưa ghép native host, đăng ký lại ID đang chạy và khởi động Media Bridge. Chrome có thể hỏi xác nhận mở ứng dụng ngoài lần đầu.
+
 
 Extension Chrome (Manifest V3) dùng để quản lý nội dung từ Google Docs, xếp lịch và tự đăng bài lên trang cá nhân Facebook. Đi kèm có Media Bridge (Python + yt-dlp) để dựng MP4.
 

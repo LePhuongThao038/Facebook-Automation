@@ -152,13 +152,44 @@ if(canonical && (v||reel))try{
 // /<uid>/videos/pcb.<album>/<mã video>; link bài viết (/posts/…) thì yt-dlp không đọc được khi chưa đăng nhập.
 const videoLinks=[],videoIds=new Set();
 const addVideo=h=>{try{const u=new URL(h,location.href);const id=u.searchParams.get('v')||u.pathname.match(/\/(?:videos|reels?)\/(?:pcb\.\d+\/)?(\d{6,})/)?.[1];if(!id||videoIds.has(id))return;videoIds.add(id);u.hash='';for(const k of [...u.searchParams.keys()])if(k!=='v')u.searchParams.delete(k);u.hostname='www.facebook.com';videoLinks.push(u.href)}catch{}};
-for(const a of all('a[href]',r)){if(globalThis.researchCaption.isComment(a))continue;const h=a.getAttribute('href')||'';if(/\/videos\/|\/reels?\/|\/watch\/?\?v=/.test(h)&&(a.querySelector('video')||/video|thước phim|reel/i.test(a.getAttribute('aria-label')||'')))addVideo(a.href)}
+// 0.2.26.1: không phụ thuộc aria-label hay thẻ video con. Facebook có thể render ô media bằng link video
+// không có nhãn tiếng Việt/tiếng Anh; trong vùng bài (loại trừ comment), link /videos/, /reel/, /watch?v=
+// vẫn là nguồn của chính media đó và có thể xuất thành Media JSON riêng.
+for(const a of all('a[href]',r)){
+ if(globalThis.researchCaption.isComment(a)||a.closest('[role=article][aria-label*="luận"],[role=article][aria-label*="comment"],[role=article][aria-label*="reply"]'))continue;
+ const h=a.getAttribute('href')||'';if(/\/(?:videos|reels?)\/|\/watch\/?\?v=/.test(h))addVideo(a.href);
+}
+// 0.2.26.2: Facebook đóng gói link/video ID trong JSON trong script, không đặt nó trên <a>.
+// Đọc cả payload và chuyển mọi video_id/reel/watch link trong vùng bài thành link riêng.
+const sourcePayload=[...all('script[type="application/json"],script:not([src])')].map(s=>s.textContent||'').join('\n');
+// 0.2.26.6: script/JSON chỉ được dùng sau khi đã xác nhận bài là video bằng DOM hoặc og:video.
+// Không dùng nó cho bài ảnh vì HTML trang bài có thể chứa nhiều mã ID gợi ý/cấu trúc và số đó không phải mã video.
+const fallbackConfirmedVideo=Boolean(v||ogVideo||videoPage);
+if(fallbackConfirmedVideo){
+ for(const h of sourcePayload.match(/https?:\\?\/\\?\/(?:www\\.)?facebook\\.com[^"'\s<>]*/g)||[]){
+  const clean=h.replaceAll('\\/','/').replaceAll('\\\\','');
+  if(/\/(?:videos|reels?)\/|\/watch\/?\?v=/.test(clean))addVideo(clean);
+ }
+ for(const match of sourcePayload.matchAll(/["']?(?:video[_-]?id|videoId)["']?\s*:\s*["']?(\d{6,25})/gi)){
+  addVideo('https://www.facebook.com/watch/?v='+match[1]);
+ }
+ for(const match of sourcePayload.matchAll(/\/(?:reel|reels)\/(\d{6,25})/g)){
+  addVideo('https://www.facebook.com/reel/'+match[1]);
+ }
+ for(const match of sourcePayload.matchAll(/\/(?:videos)\/[^"'\\s]*\/(\d{6,25})/g)){
+  addVideo('https://www.facebook.com/watch/?v='+match[1]);
+ }
+}
 if(!videoLinks.length&&(reel||videoPage))addVideo(canonical||location.href);
 // Caption lấy theo cách dự phòng (text-block) mà mở đầu bằng tên một người bình luận trong chính bài: nghi là lời trả lời
 // bình luận (vd. "Duy Nguyễn tks bro"). Chỉ đánh dấu để người vận hành kiểm tra; caption đọc từ khối message giữ nguyên.
 const lowerVi=v=>String(v||'').normalize('NFC').toLocaleLowerCase('vi').trim();
 const captionSuspect=Boolean(body)&&!captionMeta&&capturedCaption.method==='text-block'&&comments.some(c=>c.originalName&&lowerVi(body).startsWith(lowerVi(c.originalName)+' '));
-let authorURL=head?.querySelector('a[href]')?.href;try{let u=new URL(authorURL);if(!/(^|\.)facebook\.com$/.test(u.hostname)||!/^\/(?:profile\.php|people\/[^/]+\/\d+|[\w.-]+)\/?$/.test(u.pathname)||/^(?:\/(?:groups|reel|watch|photo.php|stories))$/.test(u.pathname))authorURL=null}catch{authorURL=null}return {stoppedEarly,body,captionEmptyCandidate:!body&&Boolean(images.length||v||videoPage)&&Boolean(author)&&capturedCaption.method==='missing'&&!document.querySelector('[role="progressbar"],[aria-busy="true"],input[name="pass"]')&&!(/login|checkpoint/.test(location.pathname)),captionPartial:captionMeta?false:(capturedCaption.partial||captionSuspect),captionMethod:captionMeta?'meta':captionSuspect?'nghi-tra-loi-binh-luan':capturedCaption.method,author,authorURL,location:locationText,images,comments,gallery,more,video:!!v||videoPage||!!ogVideo,videoLinks,sourceKind:reel||/\/reels?\//.test(canonical||'')?'reel':(v||videoPage||ogVideo)?'video':'post',videoURL:[v?.currentSrc,v?.src,v?.querySelector('source')?.src,ogVideo].find(s=>/^https:/.test(s||''))||''}
+let authorURL=head?.querySelector('a[href]')?.href;try{let u=new URL(authorURL);if(!/(^|\.)facebook\.com$/.test(u.hostname)||!/^\/(?:profile\.php|people\/[^/]+\/\d+|[\w.-]+)\/?$/.test(u.pathname)||/^(?:\/(?:groups|reel|watch|photo.php|stories))$/.test(u.pathname))authorURL=null}catch{authorURL=null}
+// 0.2.26.6: og:type="video.other" không phải bằng chứng bài là video. Bài ảnh phải có ít nhất
+// một phần tử <video>, og:video hoặc URL Reel/video/watch thật mới được đánh dấu video.
+const confirmedVideo=Boolean(v||ogVideo||videoPage);
+return {stoppedEarly,body,captionEmptyCandidate:!body&&Boolean(images.length||confirmedVideo)&&Boolean(author)&&capturedCaption.method==='missing'&&!document.querySelector('[role="progressbar"],[aria-busy="true"],input[name="pass"]')&&!(/login|checkpoint/.test(location.pathname)),captionPartial:captionMeta?false:(capturedCaption.partial||captionSuspect),captionMethod:captionMeta?'meta':captionSuspect?'nghi-tra-loi-binh-luan':capturedCaption.method,author,authorURL,location:locationText,images,comments,gallery,more,video:confirmedVideo,videoLinks:confirmedVideo?videoLinks:[],sourceKind:reel||/\/reels?\//.test(canonical||'')?'reel':confirmedVideo?'video':'post',videoURL:[v?.currentSrc,v?.src,v?.querySelector('source')?.src,ogVideo].find(s=>/^https:/.test(s||''))||''}
 }
 
 

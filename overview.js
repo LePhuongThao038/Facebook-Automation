@@ -70,13 +70,32 @@ async function bridgeHealth(){
  return data;
 }
 let bridgeStarting=false;
+let bridgeInstallStarted=false;
+function launchBridgeInstaller(){
+ if(bridgeInstallStarted)return;
+ bridgeInstallStarted=true;
+ try{
+  const url='fbdesk-install://install/'+encodeURIComponent(chrome.runtime.id);
+  const link=document.createElement('a');
+  link.href=url;
+  link.rel='noopener';
+  link.style.display='none';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  bridgeSay('Media Bridge: đang đăng ký ID và khởi động bộ nối…');
+ }catch(error){bridgeSay('Media Bridge chưa chạy: '+error.message);}
+}
 async function startBridgeWithRun(){
  if(bridgeStarting)return;bridgeStarting=true;
  try{
   try{const data=await bridgeHealth();bridgeSay('Media Bridge đã chạy · MP4 tối đa '+data.maxMB+' MB.');return;}catch{}
   bridgeSay('Đang mở Media Bridge chạy ngầm…');
   const response=await chrome.runtime.sendMessage({type:'media-start-video'});
-  if(!response?.ok)throw Error(response?.error||'Extension chưa phản hồi.');
+  if(!response?.ok){
+   if(/không mở được|native messaging|chưa được ghép|bộ nối/i.test(String(response?.error||'')))launchBridgeInstaller();
+   throw Error(response?.error||'Extension chưa phản hồi.');
+  }
   const start=Date.now();let lastError='';
   while(Date.now()-start<180000){
    try{const data=await bridgeHealth();bridgeSay('Media Bridge sẵn sàng · MP4 tối đa '+data.maxMB+' MB.');return;}catch(error){lastError=error.message;}
@@ -84,7 +103,11 @@ async function startBridgeWithRun(){
    await new Promise(resolve=>setTimeout(resolve,1000));
   }
   throw Error('Chưa kết nối sau 3 phút. '+lastError);
- }catch(error){bridgeSay('Media Bridge chưa chạy: '+error.message+' Bài ảnh/chữ vẫn đăng; bài video chờ bridge.');}
+ }catch(error){
+  const detail=error.message||String(error);
+  if(/không mở được|native messaging|bộ nối windows|bộ nối|đăng ký/i.test(detail))launchBridgeInstaller();
+  bridgeSay('Media Bridge chưa chạy: '+detail+' Bài ảnh/chữ vẫn đăng; bài video chờ bridge.');
+ }
  finally{bridgeStarting=false;}
 }
 runButton.onclick=async()=>{

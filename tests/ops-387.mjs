@@ -9,7 +9,7 @@ const T=t=>({runs:[{text:t}]});
 
 // Mục 1: Post Research ghi mỗi video một dòng Media JSON với link riêng; FB Desk đọc đủ.
 {
- const ctx={console};vm.createContext(ctx);
+ const ctx={console,URL};vm.createContext(ctx);
  vm.runInContext(readFileSync(new URL('../post-research/groups.js',import.meta.url),'utf8')+';this.researchLines=researchLines;',ctx);
  const post={url:'https://www.facebook.com/bacuphom2018/posts/pfbid02eh',body:'Caption',pics:[],comments:[],video:true,sourceKind:'video',
   videoLinks:['https://www.facebook.com/100001935892538/videos/pcb.38315919794722405/916384724525827','https://www.facebook.com/reel/2215910718814116']};
@@ -26,9 +26,11 @@ const T=t=>({runs:[{text:t}]});
  assert.match(videos[0].manifest.sourceUrl,/videos\/pcb\./);
  results.push('FB Desk: đọc đủ 2 video từ một bài, id không trùng');
  const legacy={...post,videoLinks:undefined};
- const one=[...ctx.researchLines([legacy],'group')].map(x=>x.t).filter(t=>/^Media JSON:/.test(t||''));
- assert.equal(one.length,1);assert.match(one[0],/\/posts\//);
- results.push('Không tìm được link video: vẫn ghi link bài như cũ (FB Desk tìm mã video, không được thì dừng trước Bridge)');
+ const legacyLines=[...ctx.researchLines([legacy],'group')].map(x=>x.t);
+ const one=legacyLines.filter(t=>/^Media JSON:/.test(t||''));
+ assert.equal(one.length,0);
+ assert.ok(legacyLines.some(t=>/chưa xác nhận link video riêng/.test(t||'')));
+ results.push('Không tìm được link video: không xuất Media JSON giả từ link bài viết');
 }
 // Mục 2: caption nghi là lời trả lời bình luận bị chặn có lý do; sửa caption thì qua.
 {
@@ -83,5 +85,69 @@ const T=t=>({runs:[{text:t}]});
  r=await run({enabledBefore:false,healthy:false,startOk:false});
  assert.deepEqual(r.sent,['desk-toggle','media-start-video']);assert.match(r.note,/chưa chạy: Chưa cài bộ nối/);
  results.push('Bật lại tự động hóa: tự mở Media Bridge nếu chưa chạy; đang chạy thì thôi; tạm dừng không mở; lỗi chỉ báo, không chặn');
+}
+// Bản vá: khi native host thiếu, nút bật dùng protocol cục bộ để cài lại đúng extension ID rồi khởi động bridge.
+{
+ const overview=readFileSync(new URL('../overview.js',import.meta.url),'utf8');
+ assert.match(overview,/fbdesk-install:\/\/install\//);
+ assert.match(overview,/encodeURIComponent\(chrome\.runtime\.id\)/);
+ assert.match(overview,/không mở được|native messaging|bộ nối windows|bộ nối|đăng ký/i);
+ const installer=readFileSync(new URL('../Install-Start-Video.ps1',import.meta.url),'utf8');
+ assert.match(installer,/RegisterDeskInstallProtocol/);
+ assert.match(installer,/fbdesk-install/);
+ const protocol=readFileSync(new URL('../Desk-Install-Protocol.ps1',import.meta.url),'utf8');
+ assert.match(protocol,/Start-Media-Background\.ps1/);
+ assert.match(protocol,/Install-Start-Video\.ps1/);
+ results.push('Bản vá: lỗi native host chuyển sang fbdesk-install để đăng ký ID và khởi động bridge');
+}
+// 0.2.26.1: quét link video/reel không phụ thuộc aria-label của ô media.
+{
+ const scan=readFileSync(new URL('../post-research/scan.js',import.meta.url),'utf8');
+ assert.match(scan,/0\.2\.26\.1/);
+ assert.match(scan,/getAttribute\('href'\)/);
+ assert.ok(scan.includes('/(?:videos|reels?)')||scan.includes('/videos/'));
+ results.push('Post Research 0.2.26.1: thu thập link /videos/, /reel/, /watch?v= rộng hơn');
+}
+// 0.2.26.2: fallback đọc JSON/script cho bài Facebook không đưa link video ra DOM.
+{
+ const scan=readFileSync(new URL('../post-research/scan.js',import.meta.url),'utf8');
+ assert.match(scan,/0\.2\.26\.2/);
+ assert.match(scan,/sourcePayload/);
+ assert.ok(scan.includes('sourcePayload.matchAll'));
+ results.push('Post Research 0.2.26.2: đọc link/video_id trong JSON/script fallback');
+}
+// 0.2.26.3: không xuất link bài viết thành Media JSON video.
+{
+ const manifest=JSON.parse(readFileSync(new URL('../post-research/manifest.json',import.meta.url),'utf8'));
+ assert.equal(manifest.version,'0.2.26.6');
+ const groups=readFileSync(new URL('../post-research/groups.js',import.meta.url),'utf8');
+ assert.match(groups,/chưa xác nhận link video riêng/);
+ results.push('Post Research 0.2.26.3: chặn Media JSON giả từ /posts/');
+}
+// 0.2.26.4: bài ảnh không giữ media video sai từ lượt quét trước.
+{
+ const {refreshSourceMedia}=await import('../source-media.js');
+ const old={id:'new-year',state:'draft',media:[{type:'image',url:'1'},{type:'image',url:'2'},{type:'video',url:'old'},{type:'video',manifest:{sourceUrl:'https://www.facebook.com/posts/pfbid-old'}}],sourceKind:'video',original:{media:[{type:'video'}]}};
+ const next={sourceKind:'post',missingVideo:false,sourceImageCount:2,media:[{type:'image',url:'1'},{type:'image',url:'2'}]};
+ const d={posts:[old],bot:{enabled:true,jobs:[]}};
+ assert.equal(refreshSourceMedia(d,old,next),'refreshed');
+ assert.deepEqual(old.media.map(m=>m.type),['image','image']);
+ assert.equal(old.sourceKind,'post');
+ assert.equal(old.missingVideo,false);
+ const scenario=readFileSync(new URL('../scenario.js',import.meta.url),'utf8');
+ assert.match(scenario,/articleSource/);
+ results.push('0.2.26.4: nhận bài /posts/ là ảnh, dọn media video dư thừa');
+}
+// 0.2.26.5: bài ảnh không được xuất Media JSON dù post.video bị đánh dấu sai.
+{
+ const ctx={console,URL};vm.createContext(ctx);
+ vm.runInContext(readFileSync(new URL('../post-research/groups.js',import.meta.url),'utf8')+';this.researchLines=researchLines;',ctx);
+ const post={url:'https://www.facebook.com/yenzo22501/posts/pfbid0vzGk',body:'Chúc mừng năm mới cả nhà',pics:['1','2'],video:true,sourceKind:'video',videoLinks:[]};
+ const lines=[...ctx.researchLines([post],'group')].map(x=>x.t);
+ assert.equal(lines.filter(t=>/^Media JSON:/.test(t||'')).length,0);
+ assert.ok(lines.some(t=>/bài có ảnh, chưa xác nhận video/.test(t||'')));
+ const manifest=JSON.parse(readFileSync(new URL('../post-research/manifest.json',import.meta.url),'utf8'));
+ assert.equal(manifest.version,'0.2.26.6');
+ results.push('0.2.26.6: bài ảnh không xuất Media JSON video');
 }
 console.log('PASS ops-387');for(const x of results)console.log(' ✓',x);

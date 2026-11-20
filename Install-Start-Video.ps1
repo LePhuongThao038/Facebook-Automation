@@ -1,5 +1,19 @@
 param([string]$ExtensionIds)
 $ErrorActionPreference = 'Stop'
+function RegisterDeskInstallProtocol {
+    $protocolKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes\fbdesk-install')
+    try {
+        $protocolKey.SetValue('', 'URL:Facebook Desk installer')
+        $protocolKey.SetValue('URL Protocol', '')
+        $commandKey = $protocolKey.CreateSubKey('shell\open\command')
+        try {
+            $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $handler = Join-Path $PSScriptRoot 'Desk-Install-Protocol.ps1'
+            $commandKey.SetValue('', '"' + $powershell + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $handler + '" "%1"', [Microsoft.Win32.RegistryValueKind]::String)
+        } finally { $commandKey.Dispose() }
+    } finally { $protocolKey.Dispose() }
+}
+RegisterDeskInstallProtocol
 if (!$ExtensionIds) {
     $idsFound = foreach ($profile in Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data') -Directory -ErrorAction SilentlyContinue) {
         foreach ($file in 'Secure Preferences','Preferences') {

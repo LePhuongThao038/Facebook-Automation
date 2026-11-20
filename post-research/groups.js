@@ -61,7 +61,10 @@ function researchLines(posts,mode,offset=0){
     for(const im of post.pics||[])lines.push({t:'',im});
     // Mỗi video một dòng Media JSON, sourceUrl là link riêng của video. Chỉ khi không tìm được link nào mới dùng link bài
     // (FB Desk sẽ thử tìm mã video bằng phiên đăng nhập, không được thì dừng trước khi dựng MP4).
-    if(post.video){const kind=post.sourceKind==='reel'||/\/reels?\//i.test(post.url)?'reel':'video';const links=post.videoLinks?.length?post.videoLinks:[post.url];lines.push({t:'Loại bài: '+kind});for(const link of links)lines.push({t:'Media JSON: '+JSON.stringify({schema:'desk.media/1',kind:/\/reels?\//i.test(link)||(kind==='reel'&&links.length===1)?'reel':'video',sourceUrl:link})});}
+    // 0.2.26.3: không được chuyển link /posts/ thành Media JSON. Link đó chưa xác nhận là nguồn video
+    // và yt-dlp/FB Desk không thể dựng MP4 từ nó. Ghi cờ để người vận hành quét lại thủ công.
+    // 0.2.26.5: bài chỉ có ảnh không được coi là video chỉ vì Facebook đánh dấu og:type=video.other.
+    if(post.video){const kind=post.sourceKind==='reel'||/\/reels?\//i.test(post.url)?'reel':'video';const links=(post.videoLinks||[]).filter(link=>{try{const u=new URL(link);return /\/(?:reels?|videos)\//.test(u.pathname)||(/^\/watch\/?$/.test(u.pathname)&&u.searchParams.has('v'));}catch{return false}});const imageOnly=(post.pics||[]).length>0&&!links.length;if(imageOnly){lines.push({t:'Loại bài: post'});lines.push({t:'Kiểm tra media: bài có ảnh, chưa xác nhận video; không xuất Media JSON.'});}else{lines.push({t:'Loại bài: '+kind});if(!links.length&&/\/(?:posts|permalink\.php|story\.php|share\/p)\//.test(post.url))lines.push({t:'Kiểm tra media: chưa xác nhận link video riêng; chưa xuất Media JSON để tránh dựng từ link bài viết.'});for(const link of links)lines.push({t:'Media JSON: '+JSON.stringify({schema:'desk.media/1',kind:/\/reels?\//i.test(link)||(kind==='reel'&&links.length===1)?'reel':'video',sourceUrl:link})});}}
    }else{
     lines.push({t:'Bình luận bài '+number,h:true});
     for(const c of post.comments||[])lines.push({t:c.name+': '+c.text,depth:c.depth||0});

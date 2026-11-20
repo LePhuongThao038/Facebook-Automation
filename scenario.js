@@ -120,7 +120,10 @@ function splitStructuredPosts(blocks,source){
   }
  }
  const posts=splitPosts(body,source);
- for(const p of posts){p.contentSchema=2;p.sourceCaptionState=p.sourceCaption?.trim()?'present':captionStates.get(p.number)||'unreadable';p.captionPartial=isCaptionPartial(captionChecks.get(p.number)?.partial);p.captionEvidence=String(captionChecks.get(p.number)?.evidence||'');p.comments=comments.get(p.number)||[];p.commentDepths=commentDepths.get(p.number)||[];p.sourcePostUrl=sources.get(p.number)||'';p.sourceKind=kinds.get(p.number)||'post';const list=manifests.get(p.number)||[];if(list.length){p.sourceKind=list[0].kind;list.forEach((manifest,i)=>p.media.push({id:p.id+':video-json'+(i?'-'+(i+1):''),type:'video',url:manifest.sourceUrl,manifest}));p.missingVideo=false;}else if(['video','reel'].includes(p.sourceKind))p.missingVideo=true;cleanCaption(p);fillMissingContent(p);}
+ for(const p of posts){p.contentSchema=2;p.sourceCaptionState=p.sourceCaption?.trim()?'present':captionStates.get(p.number)||'unreadable';p.captionPartial=isCaptionPartial(captionChecks.get(p.number)?.partial);p.captionEvidence=String(captionChecks.get(p.number)?.evidence||'');p.comments=comments.get(p.number)||[];p.commentDepths=commentDepths.get(p.number)||[];p.sourcePostUrl=sources.get(p.number)||'';p.sourceKind=kinds.get(p.number)||'post';const list=manifests.get(p.number)||[];if(list.length){p.sourceKind=list[0].kind;list.forEach((manifest,i)=>p.media.push({id:p.id+':video-json'+(i?'-'+(i+1):''),type:'video',url:manifest.sourceUrl,manifest}));p.missingVideo=false;}else if(['video','reel'].includes(p.sourceKind)){
+  let articleSource=false;try{articleSource=/\/(?:posts|permalink\.php|story\.php|share\/p)\//.test(new URL(p.sourcePostUrl||p.sourceUrl||'', 'https://www.facebook.com').pathname);}catch{}
+  if(articleSource){p.sourceKind='post';p.missingVideo=false;}else p.missingVideo=true;
+ }cleanCaption(p);fillMissingContent(p);}
  for(const n of comments.keys())if(!posts.some(p=>p.number===n))throw Error('Bình luận bài '+n+' không có bài tương ứng trong Phần 1.');
  return posts;
 }
