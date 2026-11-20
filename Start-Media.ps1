@@ -33,12 +33,17 @@ if (!(Test-Path -LiteralPath $pythonPath)) {
     }
     if (!$bootstrapPython) { throw 'Python 3 was not found. Install Python 3, then run this launcher again.' }
     Write-Host "Using Python: $bootstrapPython"
-    & $bootstrapPython -m venv $environmentPath
+    # 3.8.7: in PowerShell 5.1 with ErrorActionPreference=Stop any stderr line (even a venv warning) aborts the script.
+    $ErrorActionPreference = 'Continue'
+    & $bootstrapPython -m venv $environmentPath 2>&1 | Out-Host
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Install Python 3, then run this launcher again.' }
 }
 & $pythonPath -c 'import importlib.util,sys;sys.exit(not all(map(importlib.util.find_spec,sys.argv[1:])))' yt_dlp imageio_ffmpeg
 if ($LASTEXITCODE -ne 0) {
-    & $pythonPath -m pip install yt-dlp imageio-ffmpeg
+    $ErrorActionPreference = 'Continue'
+    & $pythonPath -m pip install yt-dlp imageio-ffmpeg 2>&1 | Out-Host
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Could not install video dependencies.' }
 }
 $bridgeArguments = @((Join-Path $PSScriptRoot 'media-bridge.py'))

@@ -1,6 +1,6 @@
 # FB Desk: cách hệ thống hoạt động
 
-Tài liệu cho đồng nghiệp mới tiếp nhận. Cập nhật theo bản **3.8.6.3** (19/11/2026).
+Tài liệu cho đồng nghiệp mới tiếp nhận. Cập nhật theo bản **3.8.7** (19/11/2026), đã gộp 3.8.6.3. Thay đổi của 3.8.7: [CHANGELOG-3.8.7.md](../CHANGELOG-3.8.7.md).
 
 ## 1. Hệ thống này làm gì
 
@@ -29,7 +29,7 @@ flowchart LR
 |---|---|
 | `background.js` | Service worker. Lưu dữ liệu (`chrome.storage.local`, khóa `deskV2`), nhận lệnh, tải media |
 | `automation.js` | Hàng chờ bot: lấy bài đến lượt, cấp quyền bấm Đăng, ghi kết quả, tự thử lại, tìm lại link |
-| `posting-plan.js` | Xếp lịch: mặc định cách nhau 3 phút |
+| `posting-plan.js` | Xếp lịch theo giờ bắt đầu và khoảng cách chọn trên đồng hồ xoay (`schedule-dial.js`, 3.8.7) |
 | `runner.js` | Tab "Bot đang chạy": điều phối từng lượt đăng, mỗi lần một bài |
 | `facebook-bot.js` | Chạy trong tab Facebook: nhận diện nick, mở ô soạn, điền chữ, tải ảnh, kiểm tra, bấm Đăng |
 | `published-link.js` | Sau khi đăng: tìm link bài (permalink) trên trang cá nhân |
@@ -59,9 +59,10 @@ sequenceDiagram
   T->>B: bot-permit (giãn cách tối thiểu 60 giây giữa 2 lần bấm)
   B-->>T: cho phép (state = verifying, ghi submittedAt)
   T->>T: bấm Đăng
+  R->>T: published: chờ hộp soạn đóng, hết "Đang đăng/Đang tải lên" (3.8.7)
   R->>T: verify: tìm link trong thông báo "Xem bài viết"
   R->>T: nếu chưa có: findPublished trên trang cá nhân
-  R->>B: runner-finish (success / unknown / failed)
+  R->>B: runner-finish (success, kể cả chưa có link nếu hộp soạn đã đóng / unknown / failed)
   R->>T: đóng tab (khi thành công hoặc lỗi trước lúc bấm Đăng)
 ```
 
@@ -93,7 +94,7 @@ stateDiagram-v2
 | `queued` | Chờ tự đăng | Đang chờ tới giờ |
 | `running` | Đang xử lý | Bot đang làm bài này |
 | `verifying` | Đang tìm link | Đã bấm Đăng, đang tìm permalink |
-| `success` | Đã đăng | Có link, đã xác minh tác giả và nội dung |
+| `success` | Đã đăng | Có link đã xác minh tác giả và nội dung, **hoặc** (3.8.7) Facebook đã đóng hộp soạn sau khi bấm Đăng mà không báo lỗi; link được tìm lại sau |
 | `unknown` | Cần đối soát | **Đã bấm Đăng**, chưa lấy được link. Bài thường đã lên Facebook |
 | `failed` | Chưa đăng / lỗi | Lỗi trước khi bấm Đăng, chưa có gì lên Facebook |
 
@@ -107,7 +108,11 @@ Thống kê từ CSV tự lưu của 10 nick trong ngày 19/11.
 | 2 | "Chưa nhận diện được nick… không thấy nút sửa trang" | Dựa vào nút "Chỉnh sửa trang cá nhân", nút này bị ẩn khi ô soạn mở | **Đã sửa (3.8.6)**: so UID phiên đăng nhập |
 | 3 | "Chưa xác minh đủ media tải xong" dù đủ ảnh | Đòi URL ảnh xem trước không đổi và mỗi ảnh có nút xóa riêng | **Đã sửa (3.8.6)**: đếm ảnh/video xem trước |
 | 4 | Album "cần 6 ảnh, thấy 5 ảnh +2", "cần 1 ảnh, thấy 2 ảnh", "cần 4, thấy 5 +4" | Ô "+N" đã nằm trong N; Facebook vẽ mỗi ảnh 2 lần (nền mờ + ảnh chính); "+N" lạc ở chỗ khác bị tính nhầm | **Đã sửa (3.8.6.2–3.8.6.3)**: đếm theo src khác nhau, "+N" phải đè lên ảnh, thấy nhiều hơn số tệp đã tải không còn bị coi là lỗi |
-| 5 | Bài đã lên nhưng mãi "cần đối soát" | Facebook để link dòng giờ đăng là `#` cho tới khi rê chuột, bot bỏ qua link đó | **Đã sửa (3.8.6.1)**, chờ xác nhận trên Facebook thật |
+| 5 | Bài đã lên nhưng mãi "cần đối soát" | Facebook để link dòng giờ đăng là `#` cho tới khi rê chuột (3.8.6.1). Còn một nguyên nhân chính: emoji hiển thị bằng `<img alt>` nên chữ của bài không khớp caption ("khớp chữ=0") | **Đã sửa (3.8.7)**: so khớp bỏ emoji, ghi Đã đăng khi hộp soạn đóng |
+| 13 | Album/video không lên | Bot chuyển tab đi tìm link 12 giây sau khi bấm Đăng, cắt ngang lúc album/video còn đang gửi | **Đã sửa (3.8.7)** |
+| 14 | Caption "Facebook" / "của tác giả" | Post Research lấy chữ giao diện khi không đọc được caption (Reel) | **Đã sửa (3.8.7 + Post Research 0.2.22)** |
+| 15 | Chọn 3 phút nhưng chạy 5–8 phút | Timer tab nền bị Chrome hãm; 3 phút tính tới lúc bắt đầu mở bài; tìm link chặn runner | **Đã sửa (3.8.7)** |
+| 16 | Video AV1 | Facebook phát Reels bằng AV1/VP9 | **Đã sửa (3.8.7)**: Media Bridge chuyển sang H.264 |
 | 6 | "Đã bấm mở bài nhưng chưa nhận diện được ô nhập" | Tab Facebook chạy nền nên Chrome không vẽ giao diện | **Đã sửa (3.8.6)**: tab chạy active, bỏ điều kiện opacity |
 | 7 | "message channel closed…" | Service worker MV3 khởi động lại giữa lượt | **Đã sửa (3.8.6)**: runner tự thử lại |
 | 8 | Dựng MP4: "không tìm được định dạng phù hợp" (Reel) | Bản hd/sd của Facebook không ghi codec/dung lượng nên bị bộ lọc loại; bản DASH là AV1 | **Đã sửa (3.8.6.3)**: ưu tiên hd/sd (H.264 + AAC). Đã dựng thử thành công qua Media Bridge |
@@ -119,10 +124,9 @@ Thống kê từ CSV tự lưu của 10 nick trong ngày 19/11.
 
 ### Việc còn mở
 
-- Chưa nghiệm thu bước tìm link (lỗi #5) trên Facebook thật.
+- 3.8.7 chưa chạy lượt đăng thật nào trên Facebook. Dùng nút **Chạy thử** trước, rồi thử 1 bài album + 1 bài video trên nick khỏe đặt "Chỉ mình tôi".
 - Video: Reel đã dựng thử thành công; link bài viết có video chưa kiểm chứng trên bài thật.
 - Bản 3.8.6.3 có thể đưa cửa sổ Chrome lên trước khi đăng, nên khi đang dùng máy có thể bị chiếm focus.
-- Một số bài trong Docs có caption chỉ là "Facebook", "hi" hoặc "❤️". Có thể bộ đọc Docs bị thiếu nội dung, cần kiểm tra lại nguồn.
 - Thỉnh thoảng một profile đứng ở trạng thái "Đang xử lý" quá 20 phút, thường do cửa sổ bị thu nhỏ hoặc đang chờ video.
 
 ## 6. Vận hành hằng ngày

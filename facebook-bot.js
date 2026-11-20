@@ -5,7 +5,10 @@ export async function facebookBot(action,payload={}){
   if(guard&&payload.jobId)guard.actionAt=Date.now();
   el.click();
  };
- const sleep=ms=>new Promise(r=>setTimeout(r,ms));const norm=s=>String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\u034f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+ // 3.8.7: Facebook vẽ emoji thành <img alt>, nên innerText của bài đã đăng thiếu emoji. So khớp sau khi bỏ emoji và khoảng trắng ở cả hai phía.
+ const flat=s=>String(s||'').normalize('NFKC').replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}\u200d\u20e3]/gu,'').replace(/[\s\u200b-\u200f\u034f\ufe0e\ufe0f]/gu,'').toLowerCase();
+ const norm=s=>String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\u034f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
  // 3.8.6: không loại phần tử theo opacity. Tab nền/cửa sổ bị che làm Chrome dừng animation,
  // hộp soạn có thể kẹt ở opacity 0 dù đã dựng xong và thao tác được.
  const visible=e=>!!(e&&e.isConnected&&!e.closest('[hidden],[inert],[aria-hidden="true"]')&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');
@@ -121,7 +124,7 @@ export async function facebookBot(action,payload={}){
   // "+N" chỉ tính khi nhãn nằm đè lên một ảnh xem trước (tránh "+4" ở chỗ khác trong hộp soạn).
   const overlaps=(a,b)=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return x.width>0&&x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top;};
   let extra=0;for(const e of all('span,div',root))if(!e.children.length){const m=(e.innerText||'').trim().match(/^\+\s?(\d{1,3})$/);if(m&&imageEls.some(img=>overlaps(e,img)))extra=Math.max(extra,Number(m[1]));}
-  const albumLabel=Math.max(0,...[root,...all('[aria-label]',root)].map(e=>{const m=(e.getAttribute('aria-label')||'').match(/(?:^|\s)(\d{1,3})\s*(?:photos|images|ảnh)(?:\s|$)|^(?:edit all|chỉnh sửa tất cả|sửa tất cả)\s*\(?(\d{1,3})\)?/i);return m?Number(m[1]||m[2]):0;}));
+  const albumLabel=Math.max(0,...[...[root,...all('[aria-label]',root)].map(e=>e.getAttribute('aria-label')||''),...buttons(root).map(label)].map(text=>{const m=String(text).match(/(?:^|\s)(\d{1,3})\s*(?:photos|images|ảnh)(?:\s|$)|(?:ảnh\/video|photo\/video|photos\/videos)[,:]?\s*(?:đã thêm|added)\s*(\d{1,3})|^(?:edit all|chỉnh sửa tất cả|sửa tất cả)\s*\(?(\d{1,3})\)?/i);return m?Number(m[1]||m[2]||m[3]):0;}));
   // Ô cuối mang nhãn "+N" đã nằm trong N (log thật: 5 ô + "+2" = 6 ảnh, 5 ô + "+6" = 10 ảnh).
   const total=Math.max(images+videos+(extra?extra-1:0),albumLabel);
   const loading=Boolean(all('[role="progressbar"]',root).length||/uploading|đang tải lên|processing video|đang xử lý video/i.test(root.innerText));
@@ -304,6 +307,23 @@ export async function facebookBot(action,payload={}){
    catch{throw Error('Facebook chưa hiển thị tên trên trang cá nhân. Mở trang của bạn rồi bấm Liên kết tài khoản.');}
   }
   if(action==='identity')return {ok:true,actor:await identity()};
+  // 3.8.7: liên kết nick tự động. UID lấy từ phiên đăng nhập (cookie c_user, chỉ đọc tại máy), không cần
+  // người dùng dán link hay tra UID của trang dùng tên rút gọn (vd. facebook.com/hoang.quang.anh.591271).
+  // Tên lấy từ nhãn ảnh đại diện lớn ở đầu trang (Facebook đã bỏ thẻ h1; tiêu đề tab có lúc chỉ là "Facebook").
+  if(action==='self-uid'){
+   const uid=sessionUid();if(!uid)throw Error('Chrome Profile này chưa đăng nhập Facebook. Đăng nhập rồi bấm Liên kết lại.');
+   const here=new URL(location.href),pageId=here.pathname==='/profile.php'?here.searchParams.get('id'):'';
+   if(pageId&&pageId!==uid)throw Error('Trang đang mở (UID '+pageId+') không phải nick đang đăng nhập (UID '+uid+').');
+   const clean=v=>String(v||'').normalize('NFKC').replace(/^\(\d+\)\s*/,'').replace(/\s*[|·–-]\s*Facebook\s*$/i,'').replace(/\s+/g,' ').trim();
+   const root=document.querySelector('[role=main]')||document.body;
+   const avatar=[...root.querySelectorAll('svg[aria-label]')].filter(s=>s.querySelector('image')&&!s.closest('[role=article],article,[role=feed],[role=banner],nav')&&s.getBoundingClientRect().width>=100&&/\/photo/.test(s.closest('a[href]')?.getAttribute('href')||'')).sort((a,b)=>b.getBoundingClientRect().width-a.getBoundingClientRect().width)[0];
+   // Trang của chính mình: ảnh đại diện mang nhãn "Hành động với ảnh đại diện", nên lấy thêm dòng tên chữ lớn ở đầu trang.
+   const bigName=[...root.querySelectorAll('h1,h2,span')].find(e=>{const t=(e.innerText||'').trim(),r=e.getBoundingClientRect();return t&&t.length<80&&!t.includes('\n')&&r.top<900&&parseFloat(getComputedStyle(e).fontSize)>=24;})?.innerText;
+   const avatarLabel=avatar?.getAttribute('aria-label');
+   const name=[/^(hành động|actions?)\b/i.test(avatarLabel||'')?'':avatarLabel,bigName,document.querySelector('meta[property="og:title"]')?.content,document.title].map(clean).find(v=>v&&!/^facebook$/i.test(v)&&v.length<100)||'';
+   const handle=pageId?'':here.pathname.replace(/^\/|\/$/g,'');
+   return {ok:true,uid,name,handle,url:location.href};
+  }
   if(action==='open'||action==='resume-open'){
    let actor;const quick=quickActor();
    if(quick==='mismatch')throw Error('Sai tài khoản đăng: Facebook đang đăng nhập UID '+sessionUid()+'.');
@@ -334,7 +354,7 @@ export async function facebookBot(action,payload={}){
    opener.scrollIntoView({block:'center'});botClick(opener);try{await wait(composer,25000);}catch{const dialogs=all('[role="dialog"],dialog');throw Error('Đã bấm mở bài nhưng chưa nhận diện được ô nhập. Hộp thoại hiện: '+dialogs.length+'; số ô nhập theo hộp: '+dialogs.map(d=>draftEditors(d).length).join(','));}if(editor().innerText.trim())throw Error('Facebook phục hồi bản nháp có sẵn. Bot không ghi đè.');
    document.documentElement.dataset.facebookDeskJob=payload.jobId;document.documentElement.dataset.facebookDeskToken=payload.token;await checkActor();return {ok:true,prior,actor};
   }
-  if(['text','upload','upload-check','pick','check','commit','audience'].includes(action)){cancel();await checkActor();}
+  if(['text','upload','upload-check','pick','check','commit','audience','snapshot'].includes(action)){cancel();await checkActor();}
   if(action==='audience')return await ensurePublicAudience();
   if(action==='text'){if(editor().innerText.trim())throw Error('Ô soạn đã có chữ.');await fillText(editor(),payload.text);return {ok:true};}
   if(action==='upload'||action==='upload-check'){
@@ -442,7 +462,7 @@ export async function facebookBot(action,payload={}){
     if(!captionMatches())throw Error('Ô soạn đã thay đổi trong thời gian chờ.');assertMedia();root=composer();
     b=await waitPublish();
     await checkActor();
-    const mediaProof=assertMedia(),audienceProof=checkAudiencePolicy();permission=await chrome.runtime.sendMessage({type:'bot-permit',jobId:payload.jobId,token:payload.token,mediaProof,audienceProof});if(permission?.data?.waitMs){let left=Math.min(10000,permission.data.waitMs);while(left>0){const part=Math.min(250,left);await sleep(part);left-=part;cancel();}}
+    const mediaProof=assertMedia(),audienceProof=checkAudiencePolicy();permission=await chrome.runtime.sendMessage({type:'bot-permit',jobId:payload.jobId,token:payload.token,mediaProof,audienceProof});if(permission?.data?.waitMs){let left=Math.min(120000,permission.data.waitMs);while(left>0){const part=Math.min(250,left);await sleep(part);left-=part;cancel();}}
    }while(permission?.data?.waitMs);
    if(!permission?.ok)throw Error(permission?.error||'Bot đã dừng hoặc lượt đăng đã được sử dụng.');
    const noticeLinks=()=>Array.from(document.querySelectorAll('[role="alert"] a[href],[role="status"] a[href],[aria-live="polite"] a[href],[aria-live="assertive"] a[href]'))
@@ -464,8 +484,59 @@ export async function facebookBot(action,payload={}){
    const publicProof=checkAudiencePolicy();globalThis.__deskSubmitAttempt={jobId:payload.jobId,token:payload.token,at:Date.now()};
    b.scrollIntoView({block:'center',inline:'nearest'});botClick(b);collect();void chrome.runtime.sendMessage({type:'bot-clicked',jobId:payload.jobId,token:payload.token}).catch(()=>{});return {ok:true,clicked:true,audienceProof:publicProof,uiDiagnostic:publishDiagnostic()};
   }
+  // 3.8.7: CHẠY THỬ. Chụp cấu trúc hộp soạn (đã ẩn dữ liệu cá nhân) để dựng bộ test giống Facebook thật,
+  // rồi bỏ bản nháp. Không bao giờ bấm Đăng trong hai thao tác này.
+  if(action==='snapshot'){
+   cancel();const root=composer();if(!root)throw Error('Không thấy hộp soạn để chụp cấu trúc.');
+   const secret=[payload.actor?.name,payload.text,...String(payload.text||'').split(/\n+/)].map(norm).filter(v=>v&&v.length>=3);
+   const scrub=v=>{let t=String(v||'').replace(/\s+/g,' ').trim();if(!t)return '';if(secret.some(x=>norm(t).includes(x)||x.includes(norm(t))&&norm(t).length>=6))return '[nội dung bài]';return t.replace(/\d{6,}/g,'[số]').slice(0,90);};
+   const kind=src=>/^blob:/.test(src)?'blob':/^data:/.test(src)?'data':/fbcdn|scontent/.test(src)?'fbcdn':src?'khác':'';
+   const outline=[];const walk=(el,depth)=>{if(outline.length>=700||depth>40)return;const r=el.getBoundingClientRect();const item={d:depth,t:el.tagName.toLowerCase()};
+    const role=el.getAttribute('role');if(role)item.role=role;const aria=el.getAttribute('aria-label');if(aria)item.aria=scrub(aria);
+    if(el.matches('img,video')){item.w=Math.round(r.width);item.h=Math.round(r.height);item.src=kind(el.currentSrc||el.src||el.poster||'');if(el.tagName==='IMG')item.nat=el.naturalWidth;}
+    if(el.isContentEditable&&el.getAttribute('contenteditable')==='true'){item.editor=true;item.chars=(el.innerText||'').length;outline.push(item);return;}
+    if(el.matches('input[type=file]'))item.accept=el.accept||'';
+    if(!el.children.length){const text=(el.textContent||'').trim();if(text)item.text=scrub(text);}
+    if(el.matches('button,[role=button]'))item.label=scrub(label(el));if(el.closest('[aria-disabled="true"]')===el)item.disabled=true;
+    outline.push(item);for(const c of el.children)if(visible(c)||c.matches('input[type=file]'))walk(c,depth+1);};
+   walk(root,0);
+   const expected=payload.expectedMedia||[];
+   return {ok:true,snapshot:{schema:'desk.ui-snapshot/1',at:new Date().toISOString(),language:document.documentElement.lang||'',viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},visibility:document.visibilityState,expected,media:mediaState(expected),publish:(({status,candidates,cover})=>({status,candidates,cover}))(publishSnapshot(root)),buttons:buttons(root).map(e=>scrub(label(e))).filter(Boolean),nodes:outline.length,outline}};
+  }
+  if(action==='discard'){
+   cancel();let root=composer();if(!root)return {ok:true,discarded:true};
+   const close=buttons(root).filter(e=>/^(?:đóng|close|đóng hộp thoại.*|close (?:the )?(?:composer|dialog).*)$/i.test(label(e)));
+   if(!close.length)throw Error('Không thấy nút Đóng của hộp soạn để bỏ bản nháp.');
+   botClick(close[0]);
+   const leave=/^(?:bỏ|bỏ qua|loại bỏ|discard|leave|rời khỏi|bỏ bài viết|discard post|không lưu|don.t save)$/i;
+   const deadline=Date.now()+15000;
+   while(Date.now()<deadline){
+    await sleep(400);
+    const confirm=all('[role="dialog"],[role="alertdialog"]').flatMap(d=>buttons(d)).find(e=>leave.test(label(e))&&!disabled(e));
+    if(confirm){botClick(confirm);await sleep(600);}
+    if(!composerCandidates().length&&!(globalThis.__deskReviewComposer?.root&&visible(globalThis.__deskReviewComposer.root)))return {ok:true,discarded:true};
+   }
+   throw Error('Chưa bỏ được bản nháp chạy thử; hộp soạn vẫn mở. Hãy tự đóng và chọn Bỏ.');
+  }
+  // 3.8.7: sau khi bấm Đăng, Facebook giữ hộp soạn ("Đang đăng…") tới khi gửi xong album/video rồi mới đóng.
+  // Hộp soạn đóng mà không có báo lỗi = Facebook đã nhận bài. Runner chỉ được rời trang sau bước này:
+  // bản cũ chuyển tab sang trang cá nhân để tìm link sau 12 giây, cắt ngang album/video còn đang gửi.
+  if(action==='published'){
+   cancel();const start=Date.now(),limit=Math.max(15000,Math.min(900000,Number(payload.timeoutMs)||120000));let closed=0;
+   const failure=/không thể đăng|chưa thể đăng|không đăng được|couldn.t (?:be )?(?:post|share)|can.t (?:post|share)|something went wrong|đã xảy ra lỗi|có lỗi xảy ra/i;
+   while(Date.now()-start<limit){
+    const restriction=globalThis.deskRestriction?.();if(restriction)throw Error(restriction);
+    const alert=all('[role="alert"],[role="alertdialog"],[role="dialog"]').find(e=>failure.test(e.innerText||''));
+    if(alert)throw Error('Facebook báo lỗi sau khi bấm Đăng: '+String(alert.innerText||'').replace(/\s+/g,' ').slice(0,160));
+    const review=globalThis.__deskReviewComposer;const busy=all('[role="dialog"],[role="status"],[role="alert"],[aria-live]').some(e=>/đang đăng|đang tải lên|đang xử lý video|posting|uploading|processing video/i.test(e.innerText||'')||(e.matches('[role="dialog"]')&&e.querySelector('[role="progressbar"]')));const open=busy||composerCandidates().length>0||Boolean(review?.root&&visible(review.root));
+    closed=open?0:closed+1;
+    if(closed>=4)return {ok:true,published:true,waitedMs:Date.now()-start};
+    await sleep(500);
+   }
+   return {ok:true,published:false,waitedMs:Date.now()-start};
+  }
   if(action==='verify'){
-   const wanted=norm(payload.text);
+   const wanted=flat(payload.text);const has=(el,part)=>flat(el?.innerText).includes(part);
    const prior=new Set(payload.prior||[]),clicked=new WeakSet();
    const start=Date.now();while(Date.now()-start<12000){
     const receipt=globalThis.__deskPostReceipt;
@@ -477,13 +548,13 @@ export async function facebookBot(action,payload={}){
      });
      if(fresh.length===1)return {ok:true,url:fresh[0],textMatch:true,authorMatch:true,source:'Thông báo Xem bài viết'};
     }
-    if(wanted.replace(/[\s\ufe0e\ufe0f]/gu,'').length<12){await sleep(200);continue;}
+    if(wanted.length<12){await sleep(200);continue;}
     // Facebook can materialize timestamp hrefs on hover. Expand only a matching author's post.
-    const roots=new Set(all('[role="article"],article'));for(const heading of all('h2,h3,h4,[role="heading"]')){let p=heading.parentElement;for(;p&&p!==document.body;p=p.parentElement){if(buttons(p).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;if(norm(p.innerText).includes(wanted.slice(0,80))&&buttons(p).some(e=>/actions for this post|hành động.*bài viết/i.test(label(e)))){roots.add(p);break;}}}
-    for(const root of roots){if(!norm(root.innerText).includes(wanted.slice(0,80)))continue;const author=all('a[href]',root).find(a=>norm(a.innerText)&&/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(a.href));if(!author||profile(author.href)!==profile(payload.actor.url)||norm(author.innerText)!==norm(payload.actor.name))continue;
-     if(!norm(root.innerText).includes(wanted)){const more=buttons(root).find(e=>/^(see more|xem thêm)$/i.test(label(e)));if(more)botClick(more);}
+    const roots=new Set(all('[role="article"],article'));for(const heading of all('h2,h3,h4,[role="heading"]')){let p=heading.parentElement;for(;p&&p!==document.body;p=p.parentElement){if(buttons(p).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;if(has(p,wanted.slice(0,80))&&buttons(p).some(e=>/actions for this post|hành động.*bài viết/i.test(label(e)))){roots.add(p);break;}}}
+    for(const root of roots){if(!has(root,wanted.slice(0,80)))continue;const author=all('a[href]',root).find(a=>norm(a.innerText)&&/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(a.href)&&profile(a.href)===profile(payload.actor.url));if(!author)continue;
+     if(!has(root,wanted)){const more=buttons(root).find(e=>/^(see more|xem thêm)$/i.test(label(e)));if(more)botClick(more);}
      for(const a of all('a[href]',root)){
-      if(a.hash.startsWith('#?')&&norm(root.innerText).includes(wanted)&&!clicked.has(a)&&
+      if(a.hash.startsWith('#?')&&has(root,wanted)&&!clicked.has(a)&&
         !a.closest('p,[data-ad-preview="message"]')&&
         (author.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING)&&
         all('a[href]',root).filter(link=>link.hash.startsWith('#?')).length===1){
@@ -495,9 +566,9 @@ export async function facebookBot(action,payload={}){
       }
       a.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));a.dispatchEvent(new MouseEvent('mouseenter',{bubbles:true}));}
     }
-    const candidates=[];for(const a of all('a[href]')){const url=canonical(a.href);if(!url||prior.has(url))continue;let root=a.closest('[role="article"],article');if(!root){let parent=a.parentElement;for(;parent&&parent!==document.body;parent=parent.parentElement){if(buttons(parent).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;const txt=norm(parent.innerText);if(txt.includes(wanted)&&buttons(parent).some(e=>/actions for this post|hành động.*bài viết|chỉnh sửa/i.test(label(e)))){root=parent;break;}}}
-     if(!root||!norm(root.innerText).includes(wanted))continue;
-     const authorLinks=all('a[href]',root).filter(l=>norm(l.innerText)&&(/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(l.href)));const firstAuthor=authorLinks[0];const author=firstAuthor&&profile(firstAuthor.href)===profile(payload.actor.url)&&norm(firstAuthor.innerText)===norm(payload.actor.name);if(!author)continue;
+    const candidates=[];for(const a of all('a[href]')){const url=canonical(a.href);if(!url||prior.has(url))continue;let root=a.closest('[role="article"],article');if(!root){let parent=a.parentElement;for(;parent&&parent!==document.body;parent=parent.parentElement){if(buttons(parent).filter(e=>/actions for this post|hành động.*bài viết/i.test(label(e))).length>1)break;if(has(parent,wanted)&&buttons(parent).some(e=>/actions for this post|hành động.*bài viết|chỉnh sửa/i.test(label(e)))){root=parent;break;}}}
+     if(!root||!has(root,wanted))continue;
+     const authorLinks=all('a[href]',root).filter(l=>norm(l.innerText)&&(/\/profile.php|facebook.com\/[^/?]+\/?(?:\?|$)/.test(l.href)));const firstAuthor=authorLinks[0];const author=firstAuthor&&profile(firstAuthor.href)===profile(payload.actor.url);if(!author)continue;
      const header=firstAuthor.closest('h2,h3,h4,[role="heading"]');
      if(!header||!(header.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING)||a.closest('p,[data-ad-preview="message"],[data-ad-rendering-role="story_message"]'))continue;
      const menu=buttons(root).find(b=>/actions for this post|hành động.*bài viết|tùy chọn.*bài viết/i.test(label(b)));

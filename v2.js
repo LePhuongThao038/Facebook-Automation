@@ -5,6 +5,7 @@ import {docsSource,htmlBlocks,splitPosts,parseTime,safeUrl,fbUrl} from './scenar
 import {vietnamTime,logMessage} from './display-time.js';
 import {resetCandidate,resetCopy,captionIssue,mediaOnlyPost} from './automation-model.js';
 import {postingOrder,DEFAULT_INTERVAL_MINUTES} from './posting-plan.js';
+import {createScheduleDial,formatGap} from './schedule-dial.js';
 import {mediaOrigins} from './media.js';
 import {readProgressFile} from './csv-progress.js';
 import {countdownText} from './countdown.js';
@@ -41,12 +42,15 @@ function cardControls(post){
   const origins=mediaOrigins([post]);
   if(origins.length&&!await chrome.permissions.request({origins}))throw Error('Cần quyền đọc ảnh/video của bài.');
   const dueAt=await request('bot-card-schedule',{id:post.id,mode,dueAt:value?value+'+07:00':''});
-  cardTimes.delete(post.id);await load();toast('Đã xếp lịch đăng lúc '+vietnamTime(dueAt));
+  cardTimes.delete(post.id);await load();toast((mode==='dry'?'Đã xếp CHẠY THỬ (không đăng) lúc ':'Đã xếp lịch đăng lúc ')+vietnamTime(dueAt));
  }
  const now=button('Đăng ngay',()=>schedule('now')),save=button('Lưu giờ',()=>schedule('manual'));
+ // 3.8.7: chạy thử đủ các bước tới trước nút Đăng, không đăng; tải về cấu trúc giao diện để kiểm thử.
+ const dry=button('Chạy thử',()=>schedule('dry'));dry.title='Chạy đủ các bước tới trước nút Đăng rồi bỏ bản nháp. Không đăng gì lên Facebook.';
+ const shot=job?.uiSnapshot?button('Tải cấu trúc giao diện',()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(job.uiSnapshot,null,1)],{type:'application/json'}));a.download='ui-snapshot-bai-'+(post.number||'')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);}):null;
  save.title='Lưu lịch đăng';save.setAttribute('aria-label',save.title);
- now.disabled=input.disabled=save.disabled=post.state==='success'||Boolean(job&&job.state!=='queued');
- group.append(now,input,save);
+ now.disabled=dry.disabled=input.disabled=save.disabled=post.state==='success'||Boolean(job&&job.state!=='queued');
+ group.append(now,dry,input,save);if(shot)group.append(shot);
  if(job?.state==='queued'){const clock=make('span',undefined,'queue-countdown');clock.dataset.dueAt=job.dueAt;clock.dataset.gap=String(job.minGapMs||0);clock.setAttribute('role','timer');group.append(clock);}
  return group;
 }
@@ -74,7 +78,7 @@ function renderCSVProgress(){
  if(!state.posts.length)container.append(make('p','CSV đã được lưu. Đọc nguồn Docs để tự động đối chiếu các bài.'));
 }
 function render(){renderSources();renderCSVProgress();$('ai-status').textContent=state.settings.mode==='team'?'GPT của team':state.settings.mode==='web'?'✦ Gemini web · Auto':state.keyConfigured?'✦ AI API · '+(state.settings.model||'chưa chọn model'):'AI chưa cấu hình';
- if(!frequencyReady){setFrequency(state.bot?.threeMinuteSchedule?state.bot.intervalMinutes||DEFAULT_INTERVAL_MINUTES:DEFAULT_INTERVAL_MINUTES);frequencyReady=true;}$('bot-pause').hidden=!state.bot?.enabled;
+ if(!frequencyReady){dial.setMinutes(state.bot?.intervalMinutes||DEFAULT_INTERVAL_MINUTES);frequencyReady=true;}dial.setCount(schedulableIds().length);$('bot-pause').hidden=!state.bot?.enabled;
  const paused=(state.bot?.jobs||[]).filter(j=>j.state==='queued'&&(!state.bot.enabled||(state.bot.cardsOnly&&!j.cardScheduled)));
  $('resume-all').hidden=!paused.length;$('pause-reason').hidden=!paused.length;
  if(paused.length){
@@ -240,38 +244,34 @@ async function enqueue(ids,minutes,resetUnsent=false){
   if(!ids.length)throw Error('Chưa xếp lịch được bài nào vì lỗi AI: '+(aiErrors[0]||'không rõ')+' Muốn đăng nguyên văn không cần AI: xóa ô Chú thích thêm của nguồn rồi bấm lại.');
   scheduleProgress('Đang xác minh nick và đọc lịch cho '+ids.length+' bài…');
   const plan=await request('bot-plan',{ids});
-  const jobs=await request('bot-enqueue',{ids,planId:plan.id,intervalMinutes:minutes,resetUnsent});
+  const {startAt}=dial.value();const jobs=await request('bot-enqueue',{ids,planId:plan.id,intervalMinutes:minutes,startAt:startAt?new Date(startAt).toISOString():'',resetUnsent});
   for(const job of jobs)cardTimes.delete(job.postId);
   await load();
-  const msg='Đã xếp lịch '+jobs.length+' bài cho '+plan.actor.name+' · Khoảng cách mặc định '+minutes+' phút.'+(skipped?' Bỏ qua '+skipped+' bài chưa đủ điều kiện.':'')+(needAI.size?' '+needAI.size+' bài chưa xếp vì lỗi AI ('+(aiErrors[0]||'')+'). Bấm Sắp lịch tự động lần nữa để xếp nốt.':'');
+  const msg='Đã xếp lịch '+jobs.length+' bài cho '+plan.actor.name+' · Bắt đầu '+(dial.value().startAt?new Date(dial.value().startAt).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'ngay')+', mỗi bài cách '+formatGap(minutes)+'.'+(skipped?' Bỏ qua '+skipped+' bài chưa đủ điều kiện.':'')+(needAI.size?' '+needAI.size+' bài chưa xếp vì lỗi AI ('+(aiErrors[0]||'')+'). Bấm Sắp lịch tự động lần nữa để xếp nốt.':'');
   scheduleProgress(msg);toast(msg);
  }finally{busy=false;}
 }
 let frequencyReady=false;
-function setFrequency(value){
- const options=[...$('frequency').options].map(option=>option.value);
- $('frequency').value=options.includes(String(value))?String(value):'custom';
- $('interval').value=value;
- $('custom-frequency').hidden=$('frequency').value!=='custom';
-}
-$('frequency').addEventListener('change',()=>{$('custom-frequency').hidden=$('frequency').value!=='custom';});
+// 3.8.7: đồng hồ xoay thay cho danh sách 3/5/10 phút. Quay để chọn giờ bắt đầu và khoảng cách giữa các bài.
+const dial=createScheduleDial($('schedule-dial'),{minutes:DEFAULT_INTERVAL_MINUTES});
+function schedulableIds(){return (state?.posts||[]).filter(p=>{
+  const job=state.bot?.jobs.find(j=>j.postId===p.id&&!['failed','cancelled'].includes(j.state));
+  return job?job.state==='queued'&&!['manual','explicit'].includes(job.scheduleMode):['draft','prepared'].includes(p.state);
+ }).map(p=>p.id);}
 on('reset-unsent',async()=>{
  await load();
  const jobs=state.bot?.jobs||[];
  const ids=state.posts.filter(p=>resetCandidate(p,jobs)&&(['error','failed'].includes(p.state)||p.captionPartial&&p.media?.length)).map(p=>p.id);
  if(!ids.length){scheduleProgress('Không có bài lỗi trước khi gửi hoặc bài có media bị chặn do caption rút gọn.');return;}
- const minutes=Number($('frequency').value==='custom'?$('interval').value:$('frequency').value);
+ const minutes=dial.value().minutes;
  if(!Number.isSafeInteger(minutes)||minutes<1)throw Error('Khoảng cách đăng không hợp lệ.');
  await enqueue(ids,minutes,true);
 });
 on('auto-schedule',async()=>{
  try{scheduleProgress('Đang kiểm tra các bài cần xếp lịch…');
- const minutes=Number($('frequency').value==='custom'?$('interval').value:$('frequency').value);
- if(!Number.isSafeInteger(minutes)||minutes<1)throw Error('Nhập khoảng cách bằng số phút nguyên lớn hơn 0.');
- const ids=state.posts.filter(p=>{
-  const job=state.bot?.jobs.find(j=>j.postId===p.id&&!['failed','cancelled'].includes(j.state));
-  return job?job.state==='queued'&&!['manual','explicit'].includes(job.scheduleMode):['draft','prepared'].includes(p.state);
- }).map(p=>p.id);
+ const minutes=dial.value().minutes;
+ if(!Number.isSafeInteger(minutes)||minutes<1)throw Error('Quay đồng hồ để chọn khoảng cách lớn hơn 0 phút.');
+ const ids=schedulableIds();
  if(ids.length)await enqueue(ids,minutes);
  else if(state.bot?.jobs.some(j=>j.state==='queued')){await request('bot-start');await load();scheduleProgress('Đã bật lại hàng chờ; giữ nguyên lịch đặt tay và lịch theo kịch bản.');}
  else throw Error('Không có bài chờ sắp lịch.');

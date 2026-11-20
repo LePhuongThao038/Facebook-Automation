@@ -58,12 +58,66 @@ function showRunControl(state){
 }
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[runKey])showRunControl(changes[runKey].newValue);});
 showRunControl((await chrome.storage.local.get(runKey))[runKey]);
+// 3.8.7: "Bật lại tự động hóa" cũng tự mở Media Bridge (như nút Start Video), chạy song song, không chặn việc bật.
+// Bridge lỗi thì chỉ báo; bài ảnh/chữ vẫn đăng được, bài video sẽ chờ bridge như cũ.
+const bridgeNote=document.getElementById('run-bridge');
+const bridgeSay=text=>{if(bridgeNote)bridgeNote.textContent=text;const r=document.getElementById('media-bridge-result');if(r)r.textContent=text;};
+async function bridgeHealth(){
+ const response=await fetch('http://127.0.0.1:47833/health',{credentials:'omit',signal:AbortSignal.timeout(2000)});
+ if(!response.ok)throw Error('Media Bridge trả HTTP '+response.status+(response.status===403?' · ID chưa được ghép.':'.'));
+ const data=await response.json();
+ if(data.schema!=='desk.media/1')throw Error('Cổng 47833 đang chạy chương trình khác.');
+ return data;
+}
+let bridgeStarting=false;
+let bridgeInstallStarted=false;
+function launchBridgeInstaller(){
+ if(bridgeInstallStarted)return;
+ bridgeInstallStarted=true;
+ try{
+  const url='fbdesk-install://install/'+encodeURIComponent(chrome.runtime.id);
+  const link=document.createElement('a');
+  link.href=url;
+  link.rel='noopener';
+  link.style.display='none';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  bridgeSay('Media Bridge: đang đăng ký ID và khởi động bộ nối…');
+ }catch(error){bridgeSay('Media Bridge chưa chạy: '+error.message);}
+}
+async function startBridgeWithRun(){
+ if(bridgeStarting)return;bridgeStarting=true;
+ try{
+  try{const data=await bridgeHealth();bridgeSay('Media Bridge đã chạy · MP4 tối đa '+data.maxMB+' MB.');return;}catch{}
+  bridgeSay('Đang mở Media Bridge chạy ngầm…');
+  const response=await chrome.runtime.sendMessage({type:'media-start-video'});
+  if(!response?.ok){
+   if(/không mở được|native messaging|chưa được ghép|bộ nối/i.test(String(response?.error||'')))launchBridgeInstaller();
+   throw Error(response?.error||'Extension chưa phản hồi.');
+  }
+  const start=Date.now();let lastError='';
+  while(Date.now()-start<180000){
+   try{const data=await bridgeHealth();bridgeSay('Media Bridge sẵn sàng · MP4 tối đa '+data.maxMB+' MB.');return;}catch(error){lastError=error.message;}
+   bridgeSay('Đang mở Media Bridge · '+Math.floor((Date.now()-start)/1000)+' giây.');
+   await new Promise(resolve=>setTimeout(resolve,1000));
+  }
+  throw Error('Chưa kết nối sau 3 phút. '+lastError);
+ }catch(error){
+  const detail=error.message||String(error);
+  if(/không mở được|native messaging|bộ nối windows|bộ nối|đăng ký/i.test(detail))launchBridgeInstaller();
+  bridgeSay('Media Bridge chưa chạy: '+detail+' Bài ảnh/chữ vẫn đăng; bài video chờ bridge.');
+ }
+ finally{bridgeStarting=false;}
+}
 runButton.onclick=async()=>{
  runButton.disabled=true;
+ const turningOn=!runEnabled;
  try{
-  const result=await chrome.runtime.sendMessage({type:'desk-toggle',enabled:!runEnabled});
+  const result=await chrome.runtime.sendMessage({type:'desk-toggle',enabled:turningOn});
   if(!result?.ok)throw Error(result?.error||'Không đổi được trạng thái.');
   showRunControl(result.data);
+  if(turningOn&&result.data?.enabled===true)startBridgeWithRun();
  }catch(e){document.getElementById('run-state').textContent=e.message;runButton.disabled=false;}
 };
 
@@ -83,16 +137,30 @@ async function readAccount(force=false){
   const shown=actor||cached;
   document.querySelector('#account-label').textContent=actor?'Facebook · lần kiểm tra gần nhất':cached?'Nick đã lưu · chưa xác minh':'Tài khoản Facebook';
   document.querySelector('#account-name').textContent=shown?.name||'Chưa xác định';
+  if(shown)void showActorName(shown);
   const detail=document.querySelector('#account-id');
   let handle='';try{const url=new URL(shown.url);handle=url.searchParams.get('id')||decodeURIComponent(url.pathname.slice(1));}catch{}
   detail.textContent=actor?(handle?'ID / '+handle:''):(result?.data?.reason||result?.error||'Bấm ↻ để kiểm tra lại.');
  }finally{accountRead=false;refreshAccount.disabled=false;}
 }
+// 3.8.7: nick chỉ có "UID …": hiện tên tra được (hồ sơ / danh bạ / tên tự đặt); bấm vào tên để đặt tên tại máy.
+async function showActorName(actor){
+ try{const {actorDisplayName}=await import('./csv-autosave.js');const {deskPersonas}=await chrome.storage.local.get('deskPersonas');
+  const {name,uid}=await actorDisplayName(actor,deskPersonas);const el=document.querySelector('#account-name');
+  if(name&&name!==actor.name)el.textContent=name;
+  if(uid&&/^(?:UID\s*)?\d+$/i.test(String(actor.name||'').trim())){el.title='Bấm để đặt tên hiển thị cho UID '+uid+' (chỉ lưu trên máy này)';el.style.cursor='pointer';
+   el.onclick=async()=>{const value=prompt('Tên hiển thị cho UID '+uid+' (dùng cho tab và tên CSV tự lưu; đăng bài vẫn theo UID):',name||'');if(value===null)return;
+    const store=(await chrome.storage.local.get('deskActorNames')).deskActorNames||{};if(value.trim())store[uid]=value.trim().slice(0,80);else delete store[uid];
+    await chrome.storage.local.set({deskActorNames:store});el.textContent=value.trim()||actor.name;};}
+ }catch{}
+}
 const linkAccountButton=document.querySelector('#link-account');
-linkAccountButton.onclick=async()=>{
+linkAccountButton.onclick=async(event)=>{
  if(accountRead)return;
- const value=prompt('Dán link trang cá nhân của bạn hoặc UID. Facebook Desk sẽ kiểm tra nick đang đăng nhập trong Chrome Profile này.');
- if(!value?.trim())return;
+ // 3.8.7: bấm là tự mở trang của nick đang đăng nhập và lấy UID; giữ Shift khi bấm để tự dán link/UID.
+ let value='';
+ if(event?.shiftKey){value=prompt('Dán link trang cá nhân của bạn hoặc UID.');if(!value?.trim())return;}
+ document.querySelector('#account-label').textContent='Đang mở trang cá nhân để lấy UID…';
  accountRead=true;refreshAccount.disabled=true;linkAccountButton.disabled=true;
  try{
   const r=await chrome.runtime.sendMessage({type:'link-account',value});

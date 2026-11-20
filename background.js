@@ -109,6 +109,8 @@ async function mediaFile(m,index,{signal,owner='manual'}={}){
  if(m.manifest){
   if(m.manifest.schema!=='desk.media/1'||!['video','reel'].includes(m.manifest.kind))throw Error('Media JSON không hợp lệ.');
   const manifest={...m.manifest,sourceUrl:await resolveVideoSource(m.manifest.sourceUrl,signal)};
+  // 3.8.7: vẫn là link BÀI VIẾT (bài nhiều media, không tìm được mã video duy nhất): dừng trước khi gọi Media Bridge.
+  if(/\/posts\/|\/permalink\.php|\/story\.php|\/share\/p\//.test(new URL(manifest.sourceUrl).pathname+'/'))throw Error('Tệp '+(index+1)+': Media nguồn ghi link BÀI VIẾT thay vì link của chính video, nên không dựng được MP4. Quét lại bài bằng Post Research mới (ghi link riêng của từng video) rồi đọc lại nguồn.');
   /* [3.6.2-video] begin */await guardVideoSize(manifest,{signal});/* [3.6.2-video] end */
   try{for(let attempt=0;attempt<300;attempt++){
    r=await fetch('http://127.0.0.1:47833/prepare',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema:manifest.schema,kind:manifest.kind,sourceUrl:manifest.sourceUrl}),signal:signal||AbortSignal.timeout(900000)});
@@ -144,7 +146,7 @@ async function handle(msg,sender){
   if(sender.id!==chrome.runtime.id||sender.url!==chrome.runtime.getURL('dashboard.html'))throw Error('Chỉ khởi động video từ bảng điều khiển.');
   let response;
   try{response=await chrome.runtime.sendNativeMessage('com.facebookdesk.media',{action:'start'});}
-  catch(error){throw Error('Chưa cài hoặc chưa ghép bộ nối Start Video. Chạy Install-Start-Video.cmd trong thư mục FB Desk một lần, dán ID đang hiện trong cài đặt, rồi tải lại extension. '+error.message);}
+  catch(error){throw Error('Chrome chưa mở được bộ nối Windows. Chạy cập nhật tại chỗ trên máy đang dùng để đăng ký hoặc sửa bộ nối cho ID '+chrome.runtime.id+'. Chi tiết: '+error.message);}
   if(!response?.ok)throw Error(response?.error||'Bộ nối video chưa phản hồi.');
   return response;
  }
@@ -165,7 +167,7 @@ async function handle(msg,sender){
   if(!rows.length)throw Error('CSV không có dòng lịch sử.');
   if(parsed.posts.length)d.sources=d.sources.filter(s=>s.url?.trim());
   if(d.bot?.jobs.some(j=>['running','verifying'].includes(j.state)))throw Error('Dừng bot và chờ lượt đang xử lý kết thúc trước khi nhập.');
-  for(const p of parsed.posts){const existing=d.posts.find(old=>old.id===p.id);if(!existing){cleanCaption(p);fillMissingContent(p);p.timing=parseTime(p.time);d.posts.push(p);}else{if(!String(existing.text||'').trim()&&p.text.trim()){existing.text=p.text;existing.blocks=structuredClone(p.blocks);}if(!existing.sourceCaption&&typeof p.sourceCaption==='string'){existing.sourceCaption=p.sourceCaption;existing.sourceCaptionState=p.sourceCaptionState;}if(!String(existing.text||'').trim()&&p.sourceCaptionState==='no_caption'){existing.sourceCaptionState='no_caption';existing.captionState='no_caption';existing.captionEvidence=p.captionEvidence;}}if(p.sourceUrl&&!d.sources.some(s=>s.url===p.sourceUrl))d.sources.push({id:crypto.randomUUID(),url:p.sourceUrl,note:''});}
+  for(const p of parsed.posts){const existing=d.posts.find(old=>old.id===p.id);if(!existing){cleanCaption(p);fillMissingContent(p);p.timing=parseTime(p.time);d.posts.push(p);}else{if(Array.isArray(p.commentDepths)&&JSON.stringify(existing.comments||[])===JSON.stringify(p.comments||[])&&JSON.stringify(existing.commentDepths||[])!==JSON.stringify(p.commentDepths))existing.commentDepths=p.commentDepths;if(!String(existing.text||'').trim()&&p.text.trim()){existing.text=p.text;existing.blocks=structuredClone(p.blocks);}if(!existing.sourceCaption&&typeof p.sourceCaption==='string'){existing.sourceCaption=p.sourceCaption;existing.sourceCaptionState=p.sourceCaptionState;}if(!String(existing.text||'').trim()&&p.sourceCaptionState==='no_caption'){existing.sourceCaptionState='no_caption';existing.captionState='no_caption';existing.captionEvidence=p.captionEvidence;}}if(p.sourceUrl&&!d.sources.some(s=>s.url===p.sourceUrl))d.sources.push({id:crypto.randomUUID(),url:p.sourceUrl,note:''});}
   const combined=combineProgressRows(d.csvProgressRows||[],rows);
   const result=restoreCSVProgress(d,combined);result.captionRepairs=parsed.repairedCaptions||0;d.csvProgressRows=combined;
   for(const p of d.posts.filter(p=>p.csvProgress&&p.state==='success')){

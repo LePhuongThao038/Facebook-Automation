@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Sổ nghiên cứu Facebook",
+  "version": "0.2.26.7",
+  "description": "Chọn bài Facebook, gom nội dung, ảnh và hội thoại thành tài liệu nghiên cứu.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA17X09midf51kHwhmlsvbC3+xabSUGW4u0fNRD1QBWfV6RE19LMwpaqdjn4MH3Gp1L39rRRwXDOWN3ZlN+gjJEXTis6CL1HwXC+oYmOmSbQTl5G3zHbrT0Lgmopryx4rGupguMLgL4JgU4G35SVYduUMyMyw+3yVbkd3IcpxBChOqYRwDGdzGc+JtqSn+5mJsW79HWUL5rMyK2WLaLwb8Urlw46HMnaOjmkUXVRH/QQ2bQHdcOwKW3wzbpwj/qN9KzrR6tLjZAXOqO7ASeTXhUz8YCaD5puJr8hUftXQNB5vn70oCtxPF4HD07KJ9MvxatvBxXCdTaK0C0foDzTZX1wIDAQAB",
+  "permissions": [
+    "scripting",
+    "storage",
+    "identity",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://*.facebook.com/*",
+    "https://*.fbcdn.net/*",
+    "https://*.fbsbx.com/*",
+    "https://www.googleapis.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://docs.googleapis.com/*"
+  ],
+  "action": {
+    "default_title": "Mở sổ nghiên cứu"
+  },
+  "background": {
+    "service_worker": "worker.js"
+  }
+}

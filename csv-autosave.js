@@ -2,7 +2,10 @@ import {exportProgressV3} from './progress-v3.js';
 export function safeCSVName(label){return String(label||'Facebook Desk').normalize('NFKC').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').replace(/[ .]+$/,'').slice(0,90)||'Facebook Desk';}
 
 let directory;
-export async function accountFileLabel(actor,personas){
+// 3.8.7: tên nick dùng chung cho tab, CSV tự lưu và tải tay. Thứ tự: tên Facebook thật -> hồ sơ nhân vật (Sheet)
+// -> danh bạ đi kèm thư mục cài (DANH-BA-TU-SHEET.json, giữ nguyên khi cập nhật tại chỗ) -> tên tự đặt tại máy theo UID.
+// Việc chọn nick để đăng vẫn chỉ dựa vào UID.
+export async function actorDisplayName(actor,personas){
  const raw=String(actor?.name||'').trim();
  let uid=actor?.uid||raw.match(/^UID\s+(\d+)$/i)?.[1]||'';
  try{uid=new URL(actor.url).searchParams.get('id')||uid;}catch{}
@@ -13,7 +16,12 @@ export async function accountFileLabel(actor,personas){
    directory??=fetch(chrome.runtime.getURL('DANH-BA-TU-SHEET.json')).then(r=>r.json()).then(d=>d.profiles).catch(()=>{directory=null;return [];});
    name=(await directory).find(p=>String(p.uid)===String(uid))?.name;
   }
+  if(!name){try{name=(await chrome.storage.local.get('deskActorNames')).deskActorNames?.[uid]||'';}catch{}}
  }
+ return {name:name||'',uid};
+}
+export async function accountFileLabel(actor,personas){
+ const {name,uid}=await actorDisplayName(actor,personas);
  return safeCSVName((name||'Chưa xác định tên')+(uid?' · UID '+uid:''));
 }
 

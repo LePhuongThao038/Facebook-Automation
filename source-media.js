@@ -2,6 +2,12 @@
 export function refreshSourceMedia(d,old,next){
  const jobs=(d.bot?.jobs||[]).filter(j=>j.postId===old.id);
  if(old.state==='success'||jobs.some(j=>j.state==='success'))return 'published';
+ // 0.2.26.3: bài ảnh không được giữ media video dư thừa từ lần quét cũ.
+ if(next.sourceKind==='post'&&!next.missingVideo){
+  const hadVideo=(old.media||[]).some(m=>m.type==='video');
+  const nextMedia=(next.media||[]).filter(m=>m.type!=='video');
+  if(hadVideo){old.media=structuredClone(nextMedia);old.missingVideo=false;old.sourceKind='post';old.original={...(old.original||next),media:structuredClone(nextMedia),sourceImageCount:next.sourceImageCount??nextMedia.filter(m=>m.type==='image').length};for(const j of jobs.filter(j=>j.state==='queued'))j.state='cancelled';return 'refreshed';}
+ }
  const incoming=(next.media||[]).filter(m=>m.type==='image').length,previous=(old.media||[]).filter(m=>m.type==='image').length;
  const expected=Math.max(next.sourceImageCount??incoming,(old.original?.media||[]).filter(m=>m.type==='image').length,old.mediaReadError?old.sourceImageCount||0:0);
  if(jobs.some(j=>['running','verifying','unknown','partial'].includes(j.state))){old.mediaRefreshPending=true;return 'pending';}

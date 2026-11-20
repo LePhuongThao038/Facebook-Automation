@@ -8,6 +8,8 @@ export function mediaOnlyPost(post){
 }
 export function captionIssue(post){
  if(mediaOnlyPost(post))return '';
+ // 3.8.7: Post Research đánh dấu caption nghi là lời trả lời bình luận. Sửa caption trên dashboard (bỏ cờ) thì được đăng.
+ if(post.captionPartial&&/nghi-tra-loi-binh-luan/.test(post.captionEvidence||''))return 'Caption nghi là lời trả lời bình luận (mở đầu bằng tên người bình luận). Mở bài gốc kiểm tra, sửa caption rồi lưu.';
  if(post.captionPartial)return 'Có caption nhưng nguồn đánh dấu còn rút gọn.';
  if(post.captionState==='unreadable')return 'Chưa lấy được caption nguồn.';
  return '';

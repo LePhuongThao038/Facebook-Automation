@@ -34,3 +34,4 @@ header{gap:16px}.desk-head-status{display:flex;align-items:center;gap:16px;margi
 @media(prefers-reduced-motion:reduce){.desk-pet *{animation:none!important}}
 
 .desk-account #link-account{font-size:12px;padding:5px 8px;width:auto;white-space:normal}
+.run-control{flex-wrap:wrap}#run-bridge{flex-basis:100%;font-size:12px;opacity:.85}#run-bridge:empty{display:none}
