@@ -9,6 +9,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Target,
     [string]$Source = '',
+    [string]$ExtensionIds,
     [switch]$Preview
 )
 $ErrorActionPreference = 'Stop'
@@ -52,7 +53,15 @@ $changes = foreach ($f in $files) {
 $changes = @($changes)
 Write-Host ("Se cap nhat {0} tep ({1} sua, {2} moi). Giu nguyen: {3}" -f $changes.Count, @($changes | Where-Object Kind -eq 'sua').Count, @($changes | Where-Object Kind -eq 'moi').Count, ($keep -join ', '))
 $changes | ForEach-Object { Write-Host ("  [{0}] {1}" -f $_.Kind, $_.Rel) }
-if ($Preview -or !$changes.Count) { Write-Host 'Che do xem truoc / khong co gi de cap nhat. Chua ghi tep nao.'; exit 0 }
+if ($Preview) { Write-Host 'Preview only: files and Windows native host registration will not be changed.'; return }
+function Register-Bridge {
+    $installer = Join-Path $Target 'Install-Start-Video.ps1'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer @installerArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Windows native host registration failed. Re-run this updater to repair it.' }
+}
+$installerArgs = @()
+if ($ExtensionIds) { $installerArgs = @('-ExtensionIds', $ExtensionIds) }
+if (!$changes.Count) { Register-Bridge; return }
 
 # Sao luu cac tep sap bi ghi de, canh thu muc dich (khong nam trong thu muc Chrome dang nap).
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -79,6 +88,7 @@ try {
     Write-Host 'Da phuc hoi thu muc dich ve trang thai truoc khi cap nhat.' -ForegroundColor Yellow
     exit 1
 }
+Register-Bridge
 $after = Read-Manifest $Target
 Write-Host ("Xong: {0} -> {1}. Ban sao luu: {2}" -f $to.version_name, $after.version_name, $backup) -ForegroundColor Green
 Write-Host 'Tiep theo: chrome://extensions -> bam (Tai lai) tren the Facebook Desk -> mo lai tab FB Desk. ID extension giu nguyen.'

@@ -146,7 +146,7 @@ async function handle(msg,sender){
   if(sender.id!==chrome.runtime.id||sender.url!==chrome.runtime.getURL('dashboard.html'))throw Error('Chỉ khởi động video từ bảng điều khiển.');
   let response;
   try{response=await chrome.runtime.sendNativeMessage('com.facebookdesk.media',{action:'start'});}
-  catch(error){throw Error('Chưa cài hoặc chưa ghép bộ nối Start Video. Chạy Install-Start-Video.cmd trong thư mục FB Desk một lần, dán ID đang hiện trong cài đặt, rồi tải lại extension. '+error.message);}
+  catch(error){throw Error('Chrome chưa mở được bộ nối Windows. Chạy cập nhật tại chỗ trên máy đang dùng để đăng ký hoặc sửa bộ nối cho ID '+chrome.runtime.id+'. Chi tiết: '+error.message);}
   if(!response?.ok)throw Error(response?.error||'Bộ nối video chưa phản hồi.');
   return response;
  }
