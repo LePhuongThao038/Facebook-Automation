@@ -130,7 +130,10 @@ r=root();let capturedCaption=globalThis.researchCaption.choose(globalThis.resear
 let locationText=txt(head).match(/(?:đang ở|is at|đang tại)\s+(.+?)(?:[.\n]|$)/i)?.[1]||'';
 let images=[],gallery='',more=false;for(const a of all('a[href*="/photo"]',r)){if(globalThis.researchCaption.isComment(a))continue;let im=a.querySelector('img');if(im?.src&&!images.includes(im.src))images.push(im.src);if(!gallery&&/set=pcb[.%]/i.test(a.href))gallery=a.href;if(/\+\s*\d+/.test(txt(a)))more=true}
 if(photo){let im=all('img[data-visualcompletion="media-vc-image"],[role=main] img').filter(e=>vis(e)&&e.naturalWidth>200).sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight)[0];if(im)images=[im.src]}
-const vs=all('video',r);const v=vs.find(vis)||vs[0]||(videoPage?all('video').find(vis):null);readComments(r);
+// 0.2.26.7: <video> trong bình luận (GIF, video người bình luận gửi) không phải media của bài. Bản cũ tính cả nó,
+// nên bài ảnh có bình luận dạng GIF bị coi là bài video (Docs "yến 5": bài 13, 18).
+const inComment=e=>globalThis.researchCaption.isComment(e)||Boolean(e.closest('[role=article][aria-label*="luận"],[role=article][aria-label*="comment"],[role=article][aria-label*="reply"]'));
+const vs=all('video',r).filter(e=>!inComment(e));const v=vs.find(vis)||vs[0]||(videoPage?all('video').find(vis):null);readComments(r);
 if(!body&&!images.length&&!v&&!videoPage)throw Error('Không thấy nội dung. Kiểm tra bài trong tab Facebook (đăng nhập, quyền xem hoặc giao diện mới).');
 // A permalink can expose the original file in its Open Graph metadata
 // even when its HTML player uses a MediaSource blob.
@@ -155,8 +158,11 @@ const addVideo=h=>{try{const u=new URL(h,location.href);const id=u.searchParams.
 // 0.2.26.1: không phụ thuộc aria-label hay thẻ video con. Facebook có thể render ô media bằng link video
 // không có nhãn tiếng Việt/tiếng Anh; trong vùng bài (loại trừ comment), link /videos/, /reel/, /watch?v=
 // vẫn là nguồn của chính media đó và có thể xuất thành Media JSON riêng.
-for(const a of all('a[href]',r)){
- if(globalThis.researchCaption.isComment(a)||a.closest('[role=article][aria-label*="luận"],[role=article][aria-label*="comment"],[role=article][aria-label*="reply"]'))continue;
+// 0.2.26.7: trang Reel/video chỉ có MỘT video và mã của nó nằm ngay trên link trang. Không gom link khác
+// (gợi ý, Reel kế tiếp) vì đó không phải video của bài (Docs "yến 5": mỗi Reel thừa một mã lạ).
+if(videoPage)addVideo(location.href);
+if(!videoPage)for(const a of all('a[href]',r)){
+ if(inComment(a))continue;
  const h=a.getAttribute('href')||'';if(/\/(?:videos|reels?)\/|\/watch\/?\?v=/.test(h))addVideo(a.href);
 }
 // 0.2.26.2: Facebook đóng gói link/video ID trong JSON trong script, không đặt nó trên <a>.
@@ -164,7 +170,11 @@ for(const a of all('a[href]',r)){
 const sourcePayload=[...all('script[type="application/json"],script:not([src])')].map(s=>s.textContent||'').join('\n');
 // 0.2.26.6: script/JSON chỉ được dùng sau khi đã xác nhận bài là video bằng DOM hoặc og:video.
 // Không dùng nó cho bài ảnh vì HTML trang bài có thể chứa nhiều mã ID gợi ý/cấu trúc và số đó không phải mã video.
-const fallbackConfirmedVideo=Boolean(v||ogVideo||videoPage);
+// 0.2.26.7: payload là của CẢ trang (video gợi ý, cột bên, Reel khác), không riêng bài. Bản cũ gom hết nên bài ảnh
+// ra 7 dòng Media JSON lạ, có mã trùng giữa các bài khác nhau. Nay chỉ dùng khi bài có <video> thật mà DOM không
+// cho link, và chỉ nhận khi số mã tìm được không vượt số video của bài; nhiều hơn thì không đoán (để trống, quét lại tay).
+const fallbackConfirmedVideo=Boolean(v)&&!videoPage&&!videoLinks.length;
+const linksBeforePayload=videoLinks.length;
 if(fallbackConfirmedVideo){
  for(const h of sourcePayload.match(/https?:\\?\/\\?\/(?:www\\.)?facebook\\.com[^"'\s<>]*/g)||[]){
   const clean=h.replaceAll('\\/','/').replaceAll('\\\\','');
@@ -179,6 +189,7 @@ if(fallbackConfirmedVideo){
  for(const match of sourcePayload.matchAll(/\/(?:videos)\/[^"'\\s]*\/(\d{6,25})/g)){
   addVideo('https://www.facebook.com/watch/?v='+match[1]);
  }
+ if(videoLinks.length-linksBeforePayload>vs.length){for(const link of videoLinks.splice(linksBeforePayload)){try{const u=new URL(link);videoIds.delete(u.searchParams.get('v')||u.pathname.match(/(\d{6,})/)?.[1]);}catch{}}}
 }
 if(!videoLinks.length&&(reel||videoPage))addVideo(canonical||location.href);
 // Caption lấy theo cách dự phòng (text-block) mà mở đầu bằng tên một người bình luận trong chính bài: nghi là lời trả lời
