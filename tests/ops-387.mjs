@@ -119,7 +119,7 @@ const T=t=>({runs:[{text:t}]});
 // 0.2.26.3: không xuất link bài viết thành Media JSON video.
 {
  const manifest=JSON.parse(readFileSync(new URL('../post-research/manifest.json',import.meta.url),'utf8'));
- assert.equal(manifest.version,'0.2.26.6');
+ assert.equal(manifest.version,'0.2.26.7');
  const groups=readFileSync(new URL('../post-research/groups.js',import.meta.url),'utf8');
  assert.match(groups,/chưa xác nhận link video riêng/);
  results.push('Post Research 0.2.26.3: chặn Media JSON giả từ /posts/');
@@ -147,7 +147,7 @@ const T=t=>({runs:[{text:t}]});
  assert.equal(lines.filter(t=>/^Media JSON:/.test(t||'')).length,0);
  assert.ok(lines.some(t=>/bài có ảnh, chưa xác nhận video/.test(t||'')));
  const manifest=JSON.parse(readFileSync(new URL('../post-research/manifest.json',import.meta.url),'utf8'));
- assert.equal(manifest.version,'0.2.26.6');
- results.push('0.2.26.6: bài ảnh không xuất Media JSON video');
+ assert.equal(manifest.version,'0.2.26.7');
+ results.push('0.2.26.7: bài ảnh không xuất Media JSON video');
 }
 console.log('PASS ops-387');for(const x of results)console.log(' ✓',x);

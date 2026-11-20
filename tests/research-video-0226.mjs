@@ -66,5 +66,15 @@ const photoPost=(extra='')=>'<div role="main"><div role="article" aria-label="B�
  assert.deepEqual(r.videoLinks.map(h=>h.match(/(\d{6,})\/?$/)[1]),['1116551721354669']);
  results.push('Album có ô video kèm link riêng: giữ đúng link đó, bỏ mã lạ của trang');
 }
+// 5) Bài 23 Dota TV: 1 ảnh + 1 video, link video riêng trong DOM.
+{
+ const mixed='<a href="https://www.facebook.com/23dotatv/videos/pcb.9/1802436951881904/"><img src="https://scontent.xx.fbcdn.net/post.jpg" width="300" height="300"></a>'+
+  '<video src="blob:x" width="300" height="300"></video>';
+ const r=await scanPage('https://www.facebook.com/23dotatv/posts/pfbid02impr',photoPost(mixed)+payload(junk));
+ assert.equal(r.video,true);
+ assert.deepEqual(r.images.length,2);
+ assert.deepEqual(r.videoLinks.map(h=>h.match(/(\d{6,})\/?$/)[1]),['1802436951881904']);
+ results.push('1 ảnh + 1 video: giữ ảnh và một Media JSON video riêng');
+}
 await browser.close();
 console.log('PASS research-video-0226');for(const x of results)console.log(' ✓',x);
