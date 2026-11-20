@@ -19,7 +19,7 @@ Repo này có nhiều người và nhiều agent cùng đẩy mã. Đọc hết 
 
 | Mục đích | Lấy | Ghi chú |
 |---|---|---|
-| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7-3`** (đầu nhánh `release/3.8.7`, PR #1). Các tag `v3.8.7`, `v3.8.7-1`, `v3.8.7-2` là mốc cũ hơn | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.25** trong `post-research/` |
+| **Bản mới nhất đã gộp đủ tính năng** | tag **`v3.8.7-4`** (đầu nhánh `release/3.8.7`, PR #1): FB Desk 3.8.7 (sửa 6 lỗi vận hành) + **Post Research 0.2.26**. Các tag `v3.8.7` … `v3.8.7-3` là mốc cũ hơn | FB Desk 3.8.7 (đã gộp 3.8.6.3) + Post Research **0.2.26** trong `post-research/` |
 | Quay lại bản trước khi gộp 3.8.7 | tag **`backup/main-2026-11-19-before-3.8.7`** | Đúng trạng thái `main` lúc 17:51 19/11/2026 (commit `f70da96`, bản 3.8.6.3 + log thống kê) |
 | Bản 3.8.6.2 gốc | tag **`backup/3.8.6.2`** (commit `9e5483d`) | |
 
@@ -43,6 +43,8 @@ Post Research 0.2.23 (`post-research/`, extension riêng), kiểm tra trên bài
 - **Vai Tác giả:** nhãn "Tác giả" giờ là chữ thường cạnh tên, không phải `aria-label`; trang ảnh không có hộp thoại "Bài viết của …". Nay nhận theo nhãn chữ hoặc UID chủ bài.
 - **Caption lấy nhầm comment:** phản hồi dạng "X đáp lại phản hồi của Y" giờ được nhận là comment.
 - **Thông tin nhân vật:** tên chủ trang lấy từ tiêu đề trang thay vì thẻ h1 đầu tiên (đã gây ra "Tên: Hoàng Quốc Việt"). **Chưa kiểm chứng** trên trang cá nhân thật, vì nick dùng để kiểm tra bị Facebook chặn xem trang cá nhân.
+
+**Post Research 0.2.26 (20/11, người dùng đã xác nhận Docs mới đúng):** câu trả lời bình luận và thụt lề xuất hiện trong Docs. Nguyên nhân gốc: khóa chống trùng làm mọi câu trả lời trùng với bình luận cha và bị bỏ (có từ mã gốc). Gồm cả: mở "Xem N câu trả lời", dựng cây theo thứ tự trang, giới hạn theo comment gốc, đưa tab Facebook lên trước khi đọc, link riêng từng video, caption trang ảnh, cờ caption nghi là trả lời bình luận.
 
 **Quy tắc phiên bản:** chỉ tăng số phiên bản sau khi vấn đề người dùng báo đã được xác nhận khắc phục. Đang sửa thì giữ nguyên số.
 
