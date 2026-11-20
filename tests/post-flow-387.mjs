@@ -98,5 +98,17 @@ try{
   assert.equal(await p.evaluate(()=>window.clicks),0);
   await ctx.close();results.push('chạy thử: chụp cấu trúc không lộ caption/tên/số, bỏ bản nháp qua hộp "Bỏ", không bấm Đăng');
  }
+ {// Liên kết tự động: trang dùng tên rút gọn, không có h1, tiêu đề tab "Facebook" -> lấy UID từ phiên, tên từ ảnh đại diện.
+  const ctx=await browser.newContext();await ctx.addCookies([{name:'c_user',value:'100099887766',domain:'.facebook.com',path:'/',secure:true}]);
+  const p=await ctx.newPage();
+  await p.route('**/*',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><html lang="vi"><head><title>Facebook</title></head><body><div role="main"><a href="/photo/?fbid=1"><svg aria-label="Hoàng Quang Anh" width="168" height="168"><image href="https://scontent.xx.fbcdn.net/a.jpg" width="168" height="168"/></svg></a><div role="button"><span style="font-size:32px">Hoàng Quang Anh</span></div></div></body></html>'}));
+  await p.goto('https://www.facebook.com/hoang.quang.anh.591271');
+  const r=await p.evaluate(({fn})=>(0,eval)('('+fn+')')('self-uid',{}),{fn:facebookBot.toString()});
+  assert.equal(r.ok,true,JSON.stringify(r));assert.equal(r.uid,'100099887766');assert.equal(r.name,'Hoàng Quang Anh');assert.equal(r.handle,'hoang.quang.anh.591271');
+  await p.goto('https://www.facebook.com/profile.php?id=555');
+  const wrong=await p.evaluate(({fn})=>(0,eval)('('+fn+')')('self-uid',{}),{fn:facebookBot.toString()});
+  assert.equal(wrong.ok,false);assert.match(wrong.error,/không phải nick đang đăng nhập/);
+  await ctx.close();results.push('liên kết tự động: trang tên rút gọn -> UID từ phiên đăng nhập, tên từ ảnh đại diện; trang UID khác -> từ chối');
+ }
  console.log('PASS post-flow-387');for(const x of results)console.log(' ✓',x);
 }finally{await browser.close();}

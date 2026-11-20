@@ -58,6 +58,13 @@ Docs mẫu bị các lỗi sau: không có thụt lề, chủ trang bị gắn v
 | Caption là một comment | Phản hồi "X đáp lại phản hồi của Y" không bị nhận là comment | Nhận đúng là comment; Bài 9 ra caption thật |
 | Tên nhân vật sai, thiếu avatar và ảnh bìa | Tên lấy từ thẻ h1 đầu tiên, có thể là tên nick đang đăng nhập; avatar chỉ được nhận khi nhãn ảnh trùng tên đó | Tên lấy từ tiêu đề trang; tìm ảnh cả ngoài `[role=main]`. **Chưa kiểm chứng** trên trang cá nhân thật |
 
+## Liên kết tài khoản tự động (20/11, không đổi số phiên bản)
+
+- Bấm **Liên kết tài khoản**: FB Desk tự mở `facebook.com/me/` trong tab nền, đọc UID của nick đang đăng nhập và tên trên trang, rồi lưu liên kết dạng `profile.php?id=UID`. Không còn phải tra UID cho nick dùng tên rút gọn (vd. `facebook.com/hoang.quang.anh.591271`).
+- Giữ **Shift** khi bấm thì vẫn dán link hoặc UID bằng tay được. Link rút gọn của chính mình được đổi sang UID. Dán UID của nick khác thì bị từ chối.
+- Liên kết cũ dạng tên rút gọn được tự đổi sang UID ở lần kiểm tra sau, nếu đúng là nick đang đăng nhập.
+- Tên lấy từ nhãn ảnh đại diện. Trên trang của chính mình nhãn đó là "Hành động với ảnh đại diện", nên tên lấy từ dòng chữ lớn ở đầu trang. Đã thử trên trang thật: ra đúng UID và tên.
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.

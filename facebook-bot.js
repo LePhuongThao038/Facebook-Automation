@@ -307,6 +307,23 @@ export async function facebookBot(action,payload={}){
    catch{throw Error('Facebook chưa hiển thị tên trên trang cá nhân. Mở trang của bạn rồi bấm Liên kết tài khoản.');}
   }
   if(action==='identity')return {ok:true,actor:await identity()};
+  // 3.8.7: liên kết nick tự động. UID lấy từ phiên đăng nhập (cookie c_user, chỉ đọc tại máy), không cần
+  // người dùng dán link hay tra UID của trang dùng tên rút gọn (vd. facebook.com/hoang.quang.anh.591271).
+  // Tên lấy từ nhãn ảnh đại diện lớn ở đầu trang (Facebook đã bỏ thẻ h1; tiêu đề tab có lúc chỉ là "Facebook").
+  if(action==='self-uid'){
+   const uid=sessionUid();if(!uid)throw Error('Chrome Profile này chưa đăng nhập Facebook. Đăng nhập rồi bấm Liên kết lại.');
+   const here=new URL(location.href),pageId=here.pathname==='/profile.php'?here.searchParams.get('id'):'';
+   if(pageId&&pageId!==uid)throw Error('Trang đang mở (UID '+pageId+') không phải nick đang đăng nhập (UID '+uid+').');
+   const clean=v=>String(v||'').normalize('NFKC').replace(/^\(\d+\)\s*/,'').replace(/\s*[|·–-]\s*Facebook\s*$/i,'').replace(/\s+/g,' ').trim();
+   const root=document.querySelector('[role=main]')||document.body;
+   const avatar=[...root.querySelectorAll('svg[aria-label]')].filter(s=>s.querySelector('image')&&!s.closest('[role=article],article,[role=feed],[role=banner],nav')&&s.getBoundingClientRect().width>=100&&/\/photo/.test(s.closest('a[href]')?.getAttribute('href')||'')).sort((a,b)=>b.getBoundingClientRect().width-a.getBoundingClientRect().width)[0];
+   // Trang của chính mình: ảnh đại diện mang nhãn "Hành động với ảnh đại diện", nên lấy thêm dòng tên chữ lớn ở đầu trang.
+   const bigName=[...root.querySelectorAll('h1,h2,span')].find(e=>{const t=(e.innerText||'').trim(),r=e.getBoundingClientRect();return t&&t.length<80&&!t.includes('\n')&&r.top<900&&parseFloat(getComputedStyle(e).fontSize)>=24;})?.innerText;
+   const avatarLabel=avatar?.getAttribute('aria-label');
+   const name=[/^(hành động|actions?)\b/i.test(avatarLabel||'')?'':avatarLabel,bigName,document.querySelector('meta[property="og:title"]')?.content,document.title].map(clean).find(v=>v&&!/^facebook$/i.test(v)&&v.length<100)||'';
+   const handle=pageId?'':here.pathname.replace(/^\/|\/$/g,'');
+   return {ok:true,uid,name,handle,url:location.href};
+  }
   if(action==='open'||action==='resume-open'){
    let actor;const quick=quickActor();
    if(quick==='mismatch')throw Error('Sai tài khoản đăng: Facebook đang đăng nhập UID '+sessionUid()+'.');

@@ -101,10 +101,12 @@ async function showActorName(actor){
  }catch{}
 }
 const linkAccountButton=document.querySelector('#link-account');
-linkAccountButton.onclick=async()=>{
+linkAccountButton.onclick=async(event)=>{
  if(accountRead)return;
- const value=prompt('Dán link trang cá nhân của bạn hoặc UID. Facebook Desk sẽ kiểm tra nick đang đăng nhập trong Chrome Profile này.');
- if(!value?.trim())return;
+ // 3.8.7: bấm là tự mở trang của nick đang đăng nhập và lấy UID; giữ Shift khi bấm để tự dán link/UID.
+ let value='';
+ if(event?.shiftKey){value=prompt('Dán link trang cá nhân của bạn hoặc UID.');if(!value?.trim())return;}
+ document.querySelector('#account-label').textContent='Đang mở trang cá nhân để lấy UID…';
  accountRead=true;refreshAccount.disabled=true;linkAccountButton.disabled=true;
  try{
   const r=await chrome.runtime.sendMessage({type:'link-account',value});

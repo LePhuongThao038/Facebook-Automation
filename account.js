@@ -15,6 +15,28 @@ async function readOwnProfile(url='https://www.facebook.com/me/',action='own-pro
  }finally{await closeWorkTab(tab.id);}
 }
 
+// 3.8.7: đọc nick đang đăng nhập qua /me/: UID (phiên đăng nhập), tên, tên rút gọn của trang.
+const uidUrl=uid=>'https://www.facebook.com/profile.php?id='+uid;
+const uidOf=url=>{try{const u=new URL(url);return u.pathname==='/profile.php'&&/^\d+$/.test(u.searchParams.get('id')||'')?u.searchParams.get('id'):'';}catch{return '';}};
+async function readSelf(){
+ const tab=await openWorkTab({url:'https://www.facebook.com/me/',active:false},'identify');
+ try{
+  await waitFacebookTab(tab.id,id=>chrome.tabs.get(id),sleep);
+  let last;
+  for(let i=0;i<14;i++){
+   const [r]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:facebookBot,args:['self-uid',{}]}).catch(()=>[{result:null}]);
+   last=r?.result;if(last?.ok&&last.name)break;if(last&&!last.ok&&/chưa đăng nhập|không phải nick/.test(last.error||''))break;
+   await sleep(500);
+  }
+  if(!last?.ok)throw Error(last?.error||'Không đọc được trang cá nhân của nick đang đăng nhập.');
+  return {uid:last.uid,name:last.name||'',handle:last.handle||''};
+ }finally{await closeWorkTab(tab.id);}
+}
+function selfActor(me){return {name:me.name||'UID '+me.uid,url:uidUrl(me.uid),uid:me.uid,...(me.handle?{handle:me.handle}:{})};}
+export async function autoLinkAccount(){
+ const actor=selfActor(await readSelf());
+ await chrome.storage.local.set({deskLinkedActor:actor});return actor;
+}
 function profileUrl(value){
  const raw=String(value||'').trim();
  if(/^\d+$/.test(raw))return 'https://www.facebook.com/profile.php?id='+raw;
@@ -26,6 +48,16 @@ function profileUrl(value){
  throw Error('Nhập UID hoặc link HTTPS tới trang cá nhân Facebook.');
 }
 async function verifyLinked(url,preferOpen=false){
+ const want=uidOf(url);
+ if(want){
+  const me=await readSelf();
+  if(me.uid!==want)throw Error('Facebook đang đăng nhập UID '+me.uid+', khác nick đã liên kết (UID '+want+'). Bấm Liên kết tài khoản để liên kết lại.');
+  return selfActor(me);
+ }
+ // Liên kết cũ bằng tên rút gọn: nếu đúng là trang của nick đang đăng nhập thì đổi sang UID.
+ try{const me=await readSelf();const path=new URL(url).pathname.replace(/^\/|\/$/g,'').toLowerCase();
+  if(me.handle&&me.handle.toLowerCase()===path){const actor=selfActor(me);await chrome.storage.local.set({deskLinkedActor:actor});return actor;}
+ }catch{}
  let diagnostic='';
  if(preferOpen){
   const tabs=await chrome.tabs.query({url:'https://www.facebook.com/*'});
@@ -56,7 +88,14 @@ async function verifyLinked(url,preferOpen=false){
  catch(e){throw Error('3.4.4 · '+(diagnostic?diagnostic+' · ':'')+'Không khớp link /me/. '+e.message);}
 }
 export async function linkAccount(value){
- const url=profileUrl(value),actor=await verifyLinked(url,true);
+ // Không nhập gì: tự liên kết nick đang đăng nhập.
+ if(!String(value||'').trim())return autoLinkAccount();
+ const url=profileUrl(value);
+ // Dán UID hoặc link tên rút gọn của chính mình: so với nick đang đăng nhập, lưu dạng UID.
+ const me=await readSelf(),want=uidOf(url),path=new URL(url).pathname.replace(/^\/|\/$/g,'').toLowerCase();
+ if(want?want===me.uid:(me.handle&&me.handle.toLowerCase()===path)){const actor=selfActor(me);await chrome.storage.local.set({deskLinkedActor:actor});return actor;}
+ if(want)throw Error('UID '+want+' không phải nick đang đăng nhập trong Chrome Profile này (UID '+me.uid+').');
+ const actor=await verifyLinked(url,true);
  if(profileUrl(actor.url)!==url)throw Error('Facebook chuyển sang một trang khác. Dùng link cuối cùng trên thanh địa chỉ.');
  await chrome.storage.local.set({deskLinkedActor:actor});return actor;
 }
