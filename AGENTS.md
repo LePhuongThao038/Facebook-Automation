@@ -66,6 +66,13 @@ Chi tiết: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md). Kiến trúc: [docs/FLOW.m
 - Bước sau khi bấm Đăng (`published`) và việc album/video lên đủ. Nick đang chạy (UID 61578904126150) bị Facebook **tạm chặn** ngày 19/11, nên chưa đăng thử. Hãy dùng "Chạy thử" trước, sau đó thử 1 bài album + 1 bài video trên một nick khỏe đặt đối tượng "Chỉ mình tôi".
 - Luồng Post Research ghi Docs mới rồi FB Desk đọc lại (mới test bằng HTML giả lập).
 
+## Pain point chưa khắc phục: bio và Story/Highlight
+
+- **Cào thông tin nhân vật/bio chưa đủ sạch.** Trường Trang cá nhân có thể có Giới thiệu, Trang/Trò chơi điện tử, Vị trí, website, liên kết Twitch/YouTube, thời gian hoạt động, hạng mục, thành viên và các thông tin khác. Code hiện chỉ trích một tập trường cố định; screenshot thật có thể vẫn xuất "Chưa thấy". Agent sửa phải đọc toàn bộ hộp/Giới thiệu/Details, chống trùng, nhận cả liên kết và năm hoạt động, không bịa dữ liệu từ UI.
+- **Chưa có cơ chế cào Story/Highlight ở Post Research.** Chưa kiểm chứng luồng mở từng Highlight, duyệt từng slide, lưu thứ tự slide, nhận ảnh/video riêng và xuất Docs. `character.js` hiện chỉ lấy thumbnail của `Tin nổi bật`; không mở từng Story/Highlight để đọc media. Không coi tin nổi bật, story đang hiện và story archive là một bài.
+- Khi làm, tách rõ: **Story đang hiện (24 giờ)**, **Story Archive sau hết hạn**, **Highlight/album nổi bật** và nguồn media của từng slide. Ghi link/ID, thứ tự, ngày giờ, loại ảnh/video và trạng thái truy cập. Không gom mã của cột đề xuất/gợi ý hoặc bài khác vào Media JSON.
+- Dữ liệu profile/Story thực tế cần test bằng Playwright trên Facebook thật, không chỉ test DOM giả lập.
+
 ## Quy tắc khi sửa và đẩy mã
 
 - **Không push thẳng `main`, không `--force`.** Tạo nhánh, mở pull request.
