@@ -1,5 +1,8 @@
 # Đọc trước khi lấy mã (cho agent và đồng nghiệp)
 
+> **Báo cáo mới từ máy vận hành (20/11/2026):** 3.8.7 chạy thật còn 6 lỗi (video trong bài nhiều media, caption lấy nhầm comment, cài làm đổi ID…). Đọc [docs/BAO-CAO-VAN-HANH-3.8.7-2026-11-20.md](docs/BAO-CAO-VAN-HANH-3.8.7-2026-11-20.md) trước khi sửa tiếp.
+
+
 Repo này có nhiều người và nhiều agent cùng đẩy mã. Đọc hết trang này trước khi pull, sửa hoặc push.
 
 ## Lấy bản nào
