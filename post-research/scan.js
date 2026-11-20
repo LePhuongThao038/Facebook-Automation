@@ -112,7 +112,16 @@ if(full)clicks=clicks.filter(e=>!moreRoots.test(txt(e))&&(!cutoff||(e.compareDoc
 let sig=comments.length+'|'+clicks.map(txt).join('|');idle=sig===last?idle+1:0;last=sig;if(idle>=3){stoppedEarly=!!clicks.length;break}
 if(!clicks.length){if(full)break;let lastComment=all(article,r).at(-1);lastComment?.scrollIntoView({block:'end'});await pause(600);if(k>40)break;continue}
 clicks.slice(0,8).forEach(e=>e.click());await pause(650)}
-r=root();const capturedCaption=globalThis.researchCaption.choose(globalThis.researchCaption.read(r),initialCaption);let body=capturedCaption.text;let head=r.querySelector('h2,h3,h4,[role=heading]');let author=(r.ariaLabel||'').replace(/^(bài viết của |post by |post from )/i,'');if(!author||author===r.ariaLabel)author=txt(head?.querySelector('a'))||txt(head);
+// Trang ảnh (/photo/?fbid=): caption nằm ở khung bên phải [role=complementary], NGOÀI [role=main], nên bản cũ không thấy
+// caption và dùng bản xem trước đã bị cắt ở dòng thời gian ("…"). Đọc khối chữ đầu tiên của khung, bỏ dòng ngày đăng
+// (Facebook chèn ký tự ẩn U+034F), số đếm ảnh "6/29" và bình luận; bấm "Xem thêm" trước nếu có.
+const photoCaption=async()=>{const side=all('[role=complementary]').find(vis);if(!side)return null;
+for(const b of all(buttons,side).filter(e=>vis(e)&&!globalThis.researchCaption.isComment(e)&&/^(xem thêm|see more)$/i.test(txt(e))).slice(0,2)){b.click();await pause(500)}
+const blocks=all('div[dir="auto"],span[dir="auto"]',side).filter(e=>vis(e)&&!globalThis.researchCaption.isComment(e)&&!e.closest('a,time,button,[role=button],h1,h2,h3,h4,[role=heading]')&&!e.querySelector('h1,h2,h3,h4,[role=heading],button,[role=button]'));
+const outer=blocks.filter(e=>!blocks.some(o=>o!==e&&o.contains(e)));
+const el=outer.find(e=>{const t=txt(e);return t&&!/\u034f/.test(t)&&!/xem bài viết|^\d+\s*\/\s*\d+$|^\d{1,2} tháng \d/i.test(t)});
+return el?{text:globalThis.researchCaption.text(el),partial:/\bsee more\s*$|xem thêm\s*$/i.test(el.innerText||''),method:'photo-panel'}:null};
+r=root();let capturedCaption=globalThis.researchCaption.choose(globalThis.researchCaption.read(r),initialCaption);if(photo){const pc=await photoCaption();if(pc?.text)capturedCaption={...pc,fallback:false};}let body=capturedCaption.text;let head=r.querySelector('h2,h3,h4,[role=heading]');let author=(r.ariaLabel||'').replace(/^(bài viết của |post by |post from )/i,'');if(!author||author===r.ariaLabel)author=txt(head?.querySelector('a'))||txt(head);
 let locationText=txt(head).match(/(?:đang ở|is at|đang tại)\s+(.+?)(?:[.\n]|$)/i)?.[1]||'';
 let images=[],gallery='',more=false;for(const a of all('a[href*="/photo"]',r)){if(globalThis.researchCaption.isComment(a))continue;let im=a.querySelector('img');if(im?.src&&!images.includes(im.src))images.push(im.src);if(!gallery&&/set=pcb[.%]/i.test(a.href))gallery=a.href;if(/\+\s*\d+/.test(txt(a)))more=true}
 if(photo){let im=all('img[data-visualcompletion="media-vc-image"],[role=main] img').filter(e=>vis(e)&&e.naturalWidth>200).sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight)[0];if(im)images=[im.src]}
@@ -134,7 +143,17 @@ if(canonical && (v||reel))try{
     })||'';
   }
 }catch{}
-let authorURL=head?.querySelector('a[href]')?.href;try{let u=new URL(authorURL);if(!/(^|\.)facebook\.com$/.test(u.hostname)||!/^\/(?:profile\.php|people\/[^/]+\/\d+|[\w.-]+)\/?$/.test(u.pathname)||/^(?:\/(?:groups|reel|watch|photo.php|stories))$/.test(u.pathname))authorURL=null}catch{authorURL=null}return {stoppedEarly,body,captionEmptyCandidate:!body&&Boolean(images.length||v||videoPage)&&Boolean(author)&&capturedCaption.method==='missing'&&!document.querySelector('[role="progressbar"],[aria-busy="true"],input[name="pass"]')&&!(/login|checkpoint/.test(location.pathname)),captionPartial:captionMeta?false:capturedCaption.partial,captionMethod:captionMeta?'meta':capturedCaption.method,author,authorURL,location:locationText,images,comments,gallery,more,video:!!v||videoPage||!!ogVideo,sourceKind:reel||/\/reels?\//.test(canonical||'')?'reel':(v||videoPage||ogVideo)?'video':'post',videoURL:[v?.currentSrc,v?.src,v?.querySelector('source')?.src,ogVideo].find(s=>/^https:/.test(s||''))||''}
+// Link riêng của TỪNG video trong vùng media của bài (không lấy trong bình luận). Ô video trong album có dạng
+// /<uid>/videos/pcb.<album>/<mã video>; link bài viết (/posts/…) thì yt-dlp không đọc được khi chưa đăng nhập.
+const videoLinks=[],videoIds=new Set();
+const addVideo=h=>{try{const u=new URL(h,location.href);const id=u.searchParams.get('v')||u.pathname.match(/\/(?:videos|reels?)\/(?:pcb\.\d+\/)?(\d{6,})/)?.[1];if(!id||videoIds.has(id))return;videoIds.add(id);u.hash='';for(const k of [...u.searchParams.keys()])if(k!=='v')u.searchParams.delete(k);u.hostname='www.facebook.com';videoLinks.push(u.href)}catch{}};
+for(const a of all('a[href]',r)){if(globalThis.researchCaption.isComment(a))continue;const h=a.getAttribute('href')||'';if(/\/videos\/|\/reels?\/|\/watch\/?\?v=/.test(h)&&(a.querySelector('video')||/video|thước phim|reel/i.test(a.getAttribute('aria-label')||'')))addVideo(a.href)}
+if(!videoLinks.length&&(reel||videoPage))addVideo(canonical||location.href);
+// Caption lấy theo cách dự phòng (text-block) mà mở đầu bằng tên một người bình luận trong chính bài: nghi là lời trả lời
+// bình luận (vd. "Duy Nguyễn tks bro"). Chỉ đánh dấu để người vận hành kiểm tra; caption đọc từ khối message giữ nguyên.
+const lowerVi=v=>String(v||'').normalize('NFC').toLocaleLowerCase('vi').trim();
+const captionSuspect=Boolean(body)&&!captionMeta&&capturedCaption.method==='text-block'&&comments.some(c=>c.originalName&&lowerVi(body).startsWith(lowerVi(c.originalName)+' '));
+let authorURL=head?.querySelector('a[href]')?.href;try{let u=new URL(authorURL);if(!/(^|\.)facebook\.com$/.test(u.hostname)||!/^\/(?:profile\.php|people\/[^/]+\/\d+|[\w.-]+)\/?$/.test(u.pathname)||/^(?:\/(?:groups|reel|watch|photo.php|stories))$/.test(u.pathname))authorURL=null}catch{authorURL=null}return {stoppedEarly,body,captionEmptyCandidate:!body&&Boolean(images.length||v||videoPage)&&Boolean(author)&&capturedCaption.method==='missing'&&!document.querySelector('[role="progressbar"],[aria-busy="true"],input[name="pass"]')&&!(/login|checkpoint/.test(location.pathname)),captionPartial:captionMeta?false:(capturedCaption.partial||captionSuspect),captionMethod:captionMeta?'meta':captionSuspect?'nghi-tra-loi-binh-luan':capturedCaption.method,author,authorURL,location:locationText,images,comments,gallery,more,video:!!v||videoPage||!!ogVideo,videoLinks,sourceKind:reel||/\/reels?\//.test(canonical||'')?'reel':(v||videoPage||ogVideo)?'video':'post',videoURL:[v?.currentSrc,v?.src,v?.querySelector('source')?.src,ogVideo].find(s=>/^https:/.test(s||''))||''}
 }
 
 

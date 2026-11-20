@@ -1,5 +1,15 @@
 # Đọc trước khi lấy mã (cho agent và đồng nghiệp)
 
+> ⚠️ **Cập nhật FB Desk: KHÔNG Load unpacked một thư mục mới.** Làm vậy Chrome tạo ID extension mới: hàng chờ và tiến độ trống, Media Bridge và bộ lưu CSV từ chối ID. Hãy chép đè vào **đúng thư mục Chrome đang nạp** bằng `Update-InPlace.ps1` (xem trước với `-Preview`, có sao lưu và tự phục hồi khi lỗi), rồi bấm ↻ trong `chrome://extensions`:
+> ```
+> powershell -ExecutionPolicy Bypass -File Update-InPlace.ps1 -Target "<thư mục Chrome đang nạp>" -Preview
+> powershell -ExecutionPolicy Bypass -File Update-InPlace.ps1 -Target "<thư mục Chrome đang nạp>"
+> ```
+> Đường dẫn đang nạp xem ở `chrome://extensions` → Chi tiết → "Đã tải từ". Nếu đã lỡ cài ra ID mới, chạy `Install-Start-Video.cmd` với ID mới (script giờ ghép ID vào cả `media-native-host.json` và `media-bridge-config.json`).
+
+
+> **Kết quả sửa 6 lỗi của báo cáo 20/11:** [docs/KET-QUA-SUA-6-LOI-3.8.7.md](docs/KET-QUA-SUA-6-LOI-3.8.7.md). Có một điểm chờ người dùng quyết định (ghi "Đã đăng" khi hộp soạn đóng mà chưa có link).
+
 > **Báo cáo mới từ máy vận hành (20/11/2026):** 3.8.7 chạy thật còn 6 lỗi (video trong bài nhiều media, caption lấy nhầm comment, cài làm đổi ID…). Đọc [docs/BAO-CAO-VAN-HANH-3.8.7-2026-11-20.md](docs/BAO-CAO-VAN-HANH-3.8.7-2026-11-20.md) trước khi sửa tiếp.
 
 

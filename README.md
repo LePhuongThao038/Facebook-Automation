@@ -1,5 +1,13 @@
 # Facebook Desk K-Global
 
+> ⚠️ **Cập nhật FB Desk: KHÔNG Load unpacked một thư mục mới.** Làm vậy Chrome tạo ID extension mới: hàng chờ và tiến độ trống, Media Bridge và bộ lưu CSV từ chối ID. Hãy chép đè vào **đúng thư mục Chrome đang nạp** bằng `Update-InPlace.ps1` (xem trước với `-Preview`, có sao lưu và tự phục hồi khi lỗi), rồi bấm ↻ trong `chrome://extensions`:
+> ```
+> powershell -ExecutionPolicy Bypass -File Update-InPlace.ps1 -Target "<thư mục Chrome đang nạp>" -Preview
+> powershell -ExecutionPolicy Bypass -File Update-InPlace.ps1 -Target "<thư mục Chrome đang nạp>"
+> ```
+> Đường dẫn đang nạp xem ở `chrome://extensions` → Chi tiết → "Đã tải từ". Nếu đã lỡ cài ra ID mới, chạy `Install-Start-Video.cmd` với ID mới (script giờ ghép ID vào cả `media-native-host.json` và `media-bridge-config.json`).
+
+
 Extension Chrome (Manifest V3) dùng để quản lý nội dung từ Google Docs, xếp lịch và tự đăng bài lên trang cá nhân Facebook. Đi kèm có Media Bridge (Python + yt-dlp) để dựng MP4.
 
 Phiên bản hiện tại: **3.8.7**. **Agent/đồng nghiệp: đọc [AGENTS.md](AGENTS.md) trước khi lấy hoặc đẩy mã.** Post Research 0.2.22 nằm trong `post-research/`. Hệ thống hoạt động thế nào, các lỗi đã gặp và cách vận hành: xem [docs/FLOW.md](docs/FLOW.md). Danh sách thay đổi: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md), [CHANGELOG-3.8.6.md](CHANGELOG-3.8.6.md).

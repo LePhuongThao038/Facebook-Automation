@@ -83,10 +83,22 @@ async function readAccount(force=false){
   const shown=actor||cached;
   document.querySelector('#account-label').textContent=actor?'Facebook · lần kiểm tra gần nhất':cached?'Nick đã lưu · chưa xác minh':'Tài khoản Facebook';
   document.querySelector('#account-name').textContent=shown?.name||'Chưa xác định';
+  if(shown)void showActorName(shown);
   const detail=document.querySelector('#account-id');
   let handle='';try{const url=new URL(shown.url);handle=url.searchParams.get('id')||decodeURIComponent(url.pathname.slice(1));}catch{}
   detail.textContent=actor?(handle?'ID / '+handle:''):(result?.data?.reason||result?.error||'Bấm ↻ để kiểm tra lại.');
  }finally{accountRead=false;refreshAccount.disabled=false;}
+}
+// 3.8.7: nick chỉ có "UID …": hiện tên tra được (hồ sơ / danh bạ / tên tự đặt); bấm vào tên để đặt tên tại máy.
+async function showActorName(actor){
+ try{const {actorDisplayName}=await import('./csv-autosave.js');const {deskPersonas}=await chrome.storage.local.get('deskPersonas');
+  const {name,uid}=await actorDisplayName(actor,deskPersonas);const el=document.querySelector('#account-name');
+  if(name&&name!==actor.name)el.textContent=name;
+  if(uid&&/^(?:UID\s*)?\d+$/i.test(String(actor.name||'').trim())){el.title='Bấm để đặt tên hiển thị cho UID '+uid+' (chỉ lưu trên máy này)';el.style.cursor='pointer';
+   el.onclick=async()=>{const value=prompt('Tên hiển thị cho UID '+uid+' (dùng cho tab và tên CSV tự lưu; đăng bài vẫn theo UID):',name||'');if(value===null)return;
+    const store=(await chrome.storage.local.get('deskActorNames')).deskActorNames||{};if(value.trim())store[uid]=value.trim().slice(0,80);else delete store[uid];
+    await chrome.storage.local.set({deskActorNames:store});el.textContent=value.trim()||actor.name;};}
+ }catch{}
 }
 const linkAccountButton=document.querySelector('#link-account');
 linkAccountButton.onclick=async()=>{

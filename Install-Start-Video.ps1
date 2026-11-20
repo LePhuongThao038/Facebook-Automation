@@ -20,5 +20,11 @@ $manifest = @{name='com.facebookdesk.media'; description='Facebook Desk Start Vi
 # Chrome starts this narrowly scoped host only for explicitly registered IDs.
 $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Google\Chrome\NativeMessagingHosts\com.facebookdesk.media')
 try { $key.SetValue('', $hostPath, [Microsoft.Win32.RegistryValueKind]::String) } finally { $key.Dispose() }
+# 3.8.7: also merge the IDs into media-bridge-config.json, otherwise Media Bridge rejects a new ID
+# ("Extension chua duoc ghep noi") even though the native host accepts it.
+$bridgeIds = @($ids)
+if (Test-Path -LiteralPath $configPath) { $bridgeIds += @((Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).extensionIds) }
+$bridgeIds = @($bridgeIds | Where-Object { $_ -match '^[a-p]{32}$' } | Select-Object -Unique)
+[IO.File]::WriteAllText($configPath, (@{extensionIds = $bridgeIds} | ConvertTo-Json), $utf8)
 Write-Host 'Installed. Reload FB Desk in chrome://extensions, then open Settings > Start Video.' -ForegroundColor Green
 Write-Host ('Registered IDs: ' + ($ids -join ', '))

@@ -59,7 +59,9 @@ function researchLines(posts,mode,offset=0){
     lines.push({t:'Trạng thái caption: '+(post.body?.trim()?'present':post.captionState==='no_caption'?'no_caption':'unreadable')},{t:'Kiểm tra caption: '+JSON.stringify({partial:Boolean(post.captionPartial),evidence:post.captionEvidence||'source-text'})});
     lines.push({t:'Nội dung bài:'},{t:post.body||''});
     for(const im of post.pics||[])lines.push({t:'',im});
-    if(post.video){const kind=post.sourceKind==='reel'||/\/reels?\//i.test(post.url)?'reel':'video';lines.push({t:'Loại bài: '+kind},{t:'Media JSON: '+JSON.stringify({schema:'desk.media/1',kind,sourceUrl:post.url})});}
+    // Mỗi video một dòng Media JSON, sourceUrl là link riêng của video. Chỉ khi không tìm được link nào mới dùng link bài
+    // (FB Desk sẽ thử tìm mã video bằng phiên đăng nhập, không được thì dừng trước khi dựng MP4).
+    if(post.video){const kind=post.sourceKind==='reel'||/\/reels?\//i.test(post.url)?'reel':'video';const links=post.videoLinks?.length?post.videoLinks:[post.url];lines.push({t:'Loại bài: '+kind});for(const link of links)lines.push({t:'Media JSON: '+JSON.stringify({schema:'desk.media/1',kind:/\/reels?\//i.test(link)||(kind==='reel'&&links.length===1)?'reel':'video',sourceUrl:link})});}
    }else{
     lines.push({t:'Bình luận bài '+number,h:true});
     for(const c of post.comments||[])lines.push({t:c.name+': '+c.text,depth:c.depth||0});

@@ -109,6 +109,8 @@ async function mediaFile(m,index,{signal,owner='manual'}={}){
  if(m.manifest){
   if(m.manifest.schema!=='desk.media/1'||!['video','reel'].includes(m.manifest.kind))throw Error('Media JSON không hợp lệ.');
   const manifest={...m.manifest,sourceUrl:await resolveVideoSource(m.manifest.sourceUrl,signal)};
+  // 3.8.7: vẫn là link BÀI VIẾT (bài nhiều media, không tìm được mã video duy nhất): dừng trước khi gọi Media Bridge.
+  if(/\/posts\/|\/permalink\.php|\/story\.php|\/share\/p\//.test(new URL(manifest.sourceUrl).pathname+'/'))throw Error('Tệp '+(index+1)+': Media nguồn ghi link BÀI VIẾT thay vì link của chính video, nên không dựng được MP4. Quét lại bài bằng Post Research mới (ghi link riêng của từng video) rồi đọc lại nguồn.');
   /* [3.6.2-video] begin */await guardVideoSize(manifest,{signal});/* [3.6.2-video] end */
   try{for(let attempt=0;attempt<300;attempt++){
    r=await fetch('http://127.0.0.1:47833/prepare',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema:manifest.schema,kind:manifest.kind,sourceUrl:manifest.sourceUrl}),signal:signal||AbortSignal.timeout(900000)});
