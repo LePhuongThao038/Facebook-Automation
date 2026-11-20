@@ -11,6 +11,10 @@ Ngày 20/11/2026, trên nhánh `release/3.8.7`. **Số phiên bản giữ nguyê
 | 5 | Dashboard ghi "3.8.5 RC11" | Nhãn, tiêu đề, hộp "Kiểm tra bản đang chạy" lấy từ manifest; tab mở từ bản trước khi ↻ được nhắc mở lại. Tiêu đề tab vẫn là tên tệp CSV nên không chèn số phiên bản | Test `ops-387`, `autosave` (tên CSV không đổi) |
 | 6 | Nick không có tên | Tên dùng chung cho tab, CSV tự lưu, tải tay: tên Facebook → hồ sơ nhân vật → `DANH-BA-TU-SHEET.json` trong thư mục cài (giữ khi cập nhật tại chỗ) → tên tự đặt tại máy (bấm vào tên nick trên dashboard). Đăng bài vẫn theo UID. CSV cũ không bị đổi tên | Test `ops-387` |
 
+## Nguyên nhân gốc: Post Research không bao giờ xuất được câu trả lời (20/11)
+
+Đã tái hiện bằng đúng `caption.js` + `scan.js`, gọi `researchScan('post',30)` trên bài thật `yenzo22501/posts/pfbid02rEWtt…` (Bài 1 trong Docs `1g0Ax5w…`). Bản quét **mở được** các câu trả lời (trang có 29 bình luận, trong đó 17 câu trả lời), nhưng chỉ trả về 11 bình luận gốc. Lý do: khóa chống trùng lấy `comment_id` số ở link cuối của mục, mà link đó của một câu trả lời trỏ về **bình luận cha**. Mọi câu trả lời vì thế trùng khóa với cha và bị loại. Lỗi có từ mã gốc, nên các sửa trước (mở "câu trả lời", dựng cây, đưa tab lên trước) chưa có tác dụng. Đã sửa khóa thành mã riêng của từng mục. Chạy lại trên cùng bài: **28 mục**, có câu trả lời cấp 1–3, đúng comment cha và đúng vai Tác giả.
+
 ## Điểm cần người duyệt quyết định
 
 Đề xuất ghi: "Facebook chỉ đóng ô soạn mà chưa có bằng chứng đăng phải giữ trạng thái cần đối soát". Bản 3.8.7 hiện làm **ngược lại theo yêu cầu trước đó của người dùng** (19/11): hộp soạn đóng mà không báo lỗi thì ghi **Đã đăng** và đóng tab, link tìm lại sau. Chưa đổi; chờ người dùng chọn.

@@ -95,7 +95,12 @@ let parent=label.match(/(?:đáp lại phản hồi của |phản hồi bình lu
 if(!d){roots++;if(Number.isFinite(limit)&&roots>limit){cutoff=c;roots--;break}hist.length=0}hist.push({n:nm,d});
 let pieces=own('[dir=auto]').filter(e=>!e.closest('a,button,[role=button]')&&!e.querySelector('[dir=auto]')).map(plain).filter(t=>t&&t!==nm&&!/^(tác giả|của tác giả|author|top fan|fan cứng|người theo dõi|follower|like|thích|reply|phản hồi)$/i.test(t));
 let content=pieces.join('\n');if(!content){let alt=own('img').map(e=>e.alt).find(s=>s&&/sticker|nhãn dán|thumb|heart|love|clap/i.test(s));if(alt)content=/heart|love|tim/i.test(alt)?'❤️':/clap|vỗ tay/i.test(alt)?'👏':/thumb|like/i.test(alt)?'👍':/laugh|cười/i.test(alt)?'😄':'💬'}if(!content)continue;
-let key=own('a[href*="comment_id="]').map(a=>a.getAttribute('href')).find(Boolean)?.match(/[?&]reply_comment_id=(\d+)/)?.[1]||own('a[href*="comment_id="]').map(a=>a.href.match(/[?&]comment_id=(\d+)/)?.[1]).find(Boolean)||[label,nm,content].join('|');if(seen.has(key))continue;seen.add(key);
+// Khóa chống trùng PHẢI riêng cho từng bình luận. Bản cũ lấy comment_id số ở link cuối của mục, mà link đó của một
+// câu trả lời trỏ về bình luận CHA, nên mọi câu trả lời trùng khóa với cha và bị bỏ (Post Research chưa từng xuất được
+// câu trả lời). Nay dùng reply_comment_id nếu có, nếu không thì mã comment_id đầu tiên của chính mục đó (mỗi mục một mã),
+// kèm nhãn, tên và nội dung.
+const ids=own('a[href*="comment_id="]').map(a=>{try{const u=new URL(a.href);return u.searchParams.get('reply_comment_id')||u.searchParams.get('comment_id')||''}catch{return ''}}).filter(Boolean);
+let key=[ids[0]||'',label,nm,content].join('|');if(seen.has(key))continue;seen.add(key);
 const profileLink=own("a[href]").find(a=>txt(a)===nm);let personKey;if(profileLink){const u=new URL(profileLink.href);personKey=u.pathname==="/profile.php"?u.searchParams.get("id"):u.pathname.replace(/\/$/,"")||undefined}const authorBadge=own('[aria-label="Tác giả"],[aria-label="Author"]').length||own('span,div').some(e=>!e.children.length&&/^(?:tác giả|author)$/i.test(txt(e)));list.push({personKey,originalName:nm,name:nm===author||authorBadge||(ownerKey&&personKey===ownerKey)?'Tác giả':nm,text:content,depth:d})}
 comments=list;rootCount=roots;
 };
