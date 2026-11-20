@@ -102,8 +102,31 @@ async function syncVideo(post, token, folder) {
   },{stage:'saving'});
 }
 
+// 0.2.26.8: bài nhiều media (ảnh + video) có thể bị lấy link theo ẢNH ĐẦU (/photo/?fbid=…) khi quét dòng thời gian.
+// Trang ảnh đó chỉ có 1 ảnh và chữ giao diện "Ảnh này nằm trong một bài viết.", nên mất video và caption thật
+// (Docs 23 Dota TV, bài 10). Nếu trang ảnh có nút "Xem bài viết" thì đọc bài gốc thay vì trang ảnh.
+function photoParentPost(){
+  const box=document.querySelector('[role=complementary]')||document;
+  if(!/Ảnh này nằm trong một bài viết|This photo is in a post/i.test(box.innerText||''))return '';
+  const a=[...box.querySelectorAll('a[href]')].find(x=>/^(Xem bài viết|View post)$/i.test((x.innerText||'').trim()));
+  if(!a)return '';
+  try{const u=new URL(a.href);if(!/(^|\.)facebook\.com$/.test(u.hostname))return '';for(const k of [...u.searchParams.keys()])if(!['story_fbid','id','fbid'].includes(k))u.searchParams.delete(k);u.hash='';
+    return /\/(?:posts|share\/p)\/|^\/permalink\.php$|^\/story\.php$/.test(u.pathname)?u.href:'';}catch{return ''}
+}
+async function resolvePhotoPost(url){
+  let path='';try{path=new URL(url).pathname}catch{return ''}
+  if(!/^\/photo(?:\.php|\/)?$/.test(path))return '';
+  await openFB(url);
+  for(let i=0;i<12;i++){
+    const [r]=await chrome.scripting.executeScript({target:{tabId},func:photoParentPost}).catch(()=>[]);
+    if(r?.result)return r.result;
+    await sleep(500);
+  }
+  return '';
+}
 async function readResearchPost(url,preview) {
   let best,caption=preview,emptyChecks=0;
+  let source=url;try{const parent=await resolvePhotoPost(url);if(parent){source=parent;caption=null;}}catch{}
   const finish=post=>{const selected=caption?.text?caption:{text:post.body||'',partial:Boolean(post.captionPartial),method:post.captionMethod};return {...post,body:selected.text,captionState:selected.text?'present':emptyChecks>=3?'no_caption':'unreadable',captionEvidence:selected.text?(selected.method||'source-text'):emptyChecks>=3?'media-only; three stable reads; no loading/login':'caption not established',captionPartial:Boolean(selected.partial),captionFallback:Boolean(selected.fallback)||(!post.body&&Boolean(selected.text))};};
   try {
     await retryRead(url,async()=>{
@@ -114,10 +137,10 @@ async function readResearchPost(url,preview) {
       if(!caption?.text){if(post.captionEmptyCandidate){emptyChecks++;if(emptyChecks<3)throw Error('Đang kiểm tra bài chỉ có media, chưa kết luận không có caption.');}else emptyChecks=0;}
       if(post.stoppedEarly)throw Error('Bình luận chưa tải hết');
       return post;
-    },{browser:true});
-    return finish(best);
+    },{browser:true,source});
+    return {...finish(best),...(source!==url?{resolvedUrl:source,photoUrl:url}:{})};
   } catch(error) {
-    if(best)return finish(best);
+    if(best)return {...finish(best),...(source!==url?{resolvedUrl:source,photoUrl:url}:{})};
     throw error;
   }
 }

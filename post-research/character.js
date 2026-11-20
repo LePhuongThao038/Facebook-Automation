@@ -103,7 +103,76 @@ async function readProfileDialog(name){
  if(close)close.click();else document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
  return out;
 }
-function showCharacter(){let box=$('character');box.replaceChildren();box.hidden=!character;if(!character)return;const add=(tag,s)=>{let e=document.createElement(tag);e.textContent=s;box.append(e);return e};add('h3','Thông tin về Profile này');for(const k of characterFields)add('div',k+': '+(character.out[k]||characterMissing));for(const k of characterMedia){add('strong',k+': ');const warn=k==='Ảnh Avatar'?character.avatarWarning:k==='Ảnh Cover photo'?character.coverWarning:'';if(warn)add('span',warn+' ');let imgs=character.media[k]||[];if(!imgs.length)add('span',characterMissing);for(const src of imgs){let im=add('img','');im.src=src;im.alt=k;im.style='max-height:90px;max-width:180px;vertical-align:middle;margin:4px';}add('br','')}}
+function showCharacter(){let box=$('character');box.replaceChildren();box.hidden=!character;if(!character)return;const add=(tag,s)=>{let e=document.createElement(tag);e.textContent=s;box.append(e);return e};add('h3','Thông tin về Profile này');for(const k of characterFields)add('div',k+': '+(character.out[k]||characterMissing));for(const r of aboutRows(character))add('div',r.t);for(const k of characterMedia){add('strong',k+': ');const warn=k==='Ảnh Avatar'?character.avatarWarning:k==='Ảnh Cover photo'?character.coverWarning:'';if(warn)add('span',warn+' ');let imgs=character.media[k]||[];if(!imgs.length)add('span',characterMissing);for(const src of imgs){let im=add('img','');im.src=src;im.alt=k;im.style='max-height:90px;max-width:180px;vertical-align:middle;margin:4px';}add('br','')}}
+// 0.2.26.8: Facebook đã chuyển trang Giới thiệu (cả trang cá nhân lẫn Page) sang các tab con directory_*
+// (Giới thiệu, Hạng mục, Thông tin cá nhân, Công việc, Học vấn, Tên, Chi tiết, Liên kết, Thông tin liên hệ…).
+// Các đường dẫn about_overview/about_contact_and_basic_info cũ không còn nội dung, nên nhiều trường ra "Chưa thấy".
+// Hàm này đọc KHUNG NỘI DUNG của tab con đang mở (không lấy phần Reels/ảnh bên dưới): tiêu đề mục (chữ 17px đậm),
+// giá trị bên dưới, nhãn phụ nhỏ (vd. "31 tháng 12, 2019–30 tháng 1, 2021", "Tên khác") ghép vào giá trị đứng trước.
+// Chỉ đọc chữ Facebook hiển thị, không suy đoán; trùng thì bỏ.
+function readAboutPanel(){
+ const main=document.querySelector('[role=main]');if(!main)return null;
+ const isSub=a=>{try{return /\/(?:directory_[a-z_]+|about_[a-z_]+)\/?$/.test(new URL(a.href).pathname)||/[?&]sk=(?:directory|about)_/.test(a.href)}catch{return false}};
+ const sub=[...main.querySelectorAll('a[role=tab][href]')].filter(isSub);
+ if(!sub.length)return null;
+ let tl=sub[0];while(tl&&!sub.every(a=>tl.contains(a)))tl=tl.parentElement;
+ let panel=[],node=tl;
+ for(let i=0;node&&node!==main&&i<8;i++){const p=node.parentElement;if(!p)break;panel=[...p.children].filter(ch=>ch!==node&&ch.innerText.trim()&&!/^(Giới thiệu|About)$/.test(ch.innerText.trim()));if(panel.length)break;node=p}
+ const own=e=>![...e.children].some(c=>c.innerText.trim()===e.innerText.trim());
+ const spans=panel.flatMap(e=>[...e.querySelectorAll('h2,h3,h4,[role=heading],span')]).filter(x=>own(x)&&x.innerText.trim());
+ const heads=new Set(spans.filter(x=>parseFloat(getComputedStyle(x).fontSize)>=17&&Number(getComputedStyle(x).fontWeight)>=600).map(x=>x.innerText.trim()));
+ const small=new Set(spans.filter(x=>parseFloat(getComputedStyle(x).fontSize)<=13).map(x=>x.innerText.trim()));
+ const sections=[];let cur=null;
+ for(const raw of panel.map(e=>e.innerText).join('\n').split('\n')){
+  const line=raw.replace(/\s+/g,' ').trim();
+  if(!line||/^[·•|]$/.test(line))continue;
+  if(heads.has(line)){if(cur&&cur.title===line)continue;if(sections.some(s=>s.title===line&&s.values.length)){cur=sections.find(s=>s.title===line);continue}cur={title:line,values:[]};sections.push(cur);continue}
+  if(!cur){cur={title:'',values:[]};sections.push(cur)}
+  if(small.has(line)&&!heads.has(line)&&cur.values.length&&!cur.values.includes(line)){const last=cur.values.length-1;if(!cur.values[last].includes('('+line+')'))cur.values[last]+=' ('+line+')';continue}
+  if(!cur.values.some(v=>v===line||v.startsWith(line+' (')))cur.values.push(line);
+ }
+ const links=[];
+ for(const a of panel.flatMap(e=>[...e.querySelectorAll('a[href]')])){try{let u=new URL(a.href);const real=u.searchParams.get('u');if(real)u=new URL(real);if(!/^https?:$/.test(u.protocol)||/(^|\.)facebook\.com$/.test(u.hostname))continue;for(const k of [...u.searchParams.keys()])if(/^(fbclid|utm_)/.test(k))u.searchParams.delete(k);if(!links.includes(u.href))links.push(u.href)}catch{}}
+ const selected=sub.find(a=>a.getAttribute('aria-selected')==='true');
+ return {path:location.pathname,tab:selected?.innerText.trim()||'',tabs:sub.map(a=>({name:a.innerText.trim(),href:a.href})),sections:sections.filter(s=>s.title&&s.values.length),links};
+}
+// Đọc lần lượt mọi tab con của trang Giới thiệu trong một tab nền; trả về [{tab,sections,links}].
+async function readAboutTabs(url){
+ const start=new URL(url);if(start.pathname==='/profile.php')start.searchParams.set('sk','about');else start.pathname=start.pathname.replace(/\/$/,'')+'/about';
+ const tab=(await chrome.tabs.create({url:start.href,active:false})).id;const out=[];
+ const read=async()=>(await chrome.scripting.executeScript({target:{tabId:tab},func:readAboutPanel}).catch(()=>[]))[0]?.result;
+ const settle=async()=>{for(let i=0;i<20;i++){await sleep(350);const t=await chrome.tabs.get(tab).catch(()=>null);if(t?.status==='complete')break}await sleep(900)};
+ try{
+  await settle();let first=null;for(let i=0;i<6&&!first?.tabs?.length;i++){first=await read();if(!first?.tabs?.length)await sleep(600)}
+  if(!first?.tabs?.length)return out;
+  const seen=new Set;
+  for(const t of first.tabs){if(seen.has(t.href))continue;seen.add(t.href);
+   await chrome.tabs.update(tab,{url:t.href});await settle();
+   let r=null;for(let i=0;i<4;i++){r=await read();if(r?.sections?.length||r?.links?.length)break;await sleep(600)}
+   if(r&&(r.sections.length||r.links.length))out.push({tab:t.name,sections:r.sections,links:r.links});
+  }
+ }finally{await chrome.tabs.remove(tab).catch(()=>{})}
+ return out;
+}
+// Điền các trường cố định còn trống từ trang Giới thiệu; phần còn lại xuất nguyên văn ở "Giới thiệu đầy đủ".
+function fillFromAbout(c){
+ const pick=re=>c.about.flatMap(t=>t.sections).filter(s=>re.test(s.title)).flatMap(s=>s.values);
+ const set=(k,vals,sep)=>{if(!c.out[k]&&vals.length)c.out[k]=vals.join(sep||' · ')};
+ set('Nickname',pick(/^(Các tên khác|Tên khác|Biệt danh|Other names|Nicknames?)$/i).map(v=>v.replace(/\s*\((?:Tên khác|Cách viết khác|Biệt danh|Nickname|Other name|Alternate spelling)\)$/i,'')));
+ set('Mô tả',[...pick(/^(Tiểu sử|Bio|Giới thiệu|Intro)$/i),...pick(/^(Hạng mục|Category|Categories)$/i)]);
+ set('Sống tại',pick(/^(Sống tại|Tỉnh\/Thành phố hiện tại|Thành phố hiện tại|Current city|Địa chỉ|Address|Vị trí|Location)$/i));
+ set('Ngày sinh',pick(/^(Ngày sinh|Sinh nhật|Birthday|Birth date|Năm sinh|Birth year)$/i));
+ set('Tình trạng hôn nhân',pick(/^(Mối quan hệ|Tình trạng mối quan hệ|Relationship|Relationship status)$/i));
+ const contact=c.about.flatMap(t=>t.sections).filter(s=>/^(Liên kết|Links?|Trang web|Websites?|Email|Số điện thoại|Điện thoại|Phone|Di động|Mobile|Messenger|Mạng xã hội|Social links|Thông tin liên hệ|Contact info)$/i.test(s.title)).map(s=>s.title+': '+s.values.join(', '));
+ set('Thông tin liên hệ',contact,'; ');
+}
+function aboutRows(c){
+ if(!c?.about?.length)return [];
+ const rows=[{t:'Giới thiệu đầy đủ (trang Giới thiệu của Facebook):'}],done=new Set;
+ for(const t of c.about){for(const s of t.sections){const line=(t.tab&&t.tab!==s.title?t.tab+' › ':'')+s.title+': '+s.values.join(' · ');if(!done.has(line)){done.add(line);rows.push({t:line})}}
+  for(const l of t.links)if(!done.has(l)){done.add(l);rows.push({t:'Liên kết: '+l,url:l})}}
+ return rows;
+}
 async function loadCharacter(id,url){
  const read=async(t,a)=>(await chrome.scripting.executeScript({target:{tabId:t},func:readCharacter,args:[a]}))[0]?.result;
  let base;
@@ -135,6 +204,8 @@ async function loadCharacter(id,url){
  for(let i=0;i<16;i++){await sleep(350);const t=await chrome.tabs.get(aux);if(t.status==='complete'&&t.url===u.href)break}await sleep(550);
  const data=await read(aux,true);if(data&&(!base.out['Tên']||data.out['Tên']===base.out['Tên']))for(const k of characterFields)if(!character.out[k]&&data.out[k])character.out[k]=data.out[k];
  }}finally{if(aux)await chrome.tabs.remove(aux).catch(()=>{});showCharacter()}
+ // 0.2.26.8: trang Giới thiệu kiểu mới (directory_*).
+ try{character.about=await readAboutTabs(url);fillFromAbout(character)}catch{character.about=character.about||[]}finally{showCharacter()}
 }
 async function fetchCharacterPics(){if(!character)return;for(const k of characterMedia){character.pics[k]??=[];for(const src of character.media[k]||[])if(!character.pics[k].some(i=>i.src===src))try{character.pics[k].push({...await (k==='Tin nổi bật'?pic(src):avatarPicture(src)),src})}catch{note('Chưa tải được '+k+'; đã giữ liên kết ảnh.')}}}
-function characterRows(c){if(!c)return [];let rows=characterFields.map(k=>({t:k+': '+(c.out[k]||characterMissing)}));for(const k of characterMedia){const warn=k==='Ảnh Avatar'?c.avatarWarning:k==='Ảnh Cover photo'?c.coverWarning:'';rows.push({t:k+':'+(warn?' '+warn:'')});if(k==='Ảnh Avatar'&&c.avatarSource)rows.push({t:'Xem ảnh trong album Facebook',url:c.avatarSource});let urls=c.media[k]||[];if(!urls.length)rows.push({t:characterMissing});for(const src of urls){let im=(c.pics[k]||[]).find(i=>(i.original||i.src)===src);rows.push(im?{t:'',im}:{t:'Mở ảnh trên Facebook',url:src})}}return rows}
+function characterRows(c){if(!c)return [];let rows=characterFields.map(k=>({t:k+': '+(c.out[k]||characterMissing)}));rows.push(...aboutRows(c));for(const k of characterMedia){const warn=k==='Ảnh Avatar'?c.avatarWarning:k==='Ảnh Cover photo'?c.coverWarning:'';rows.push({t:k+':'+(warn?' '+warn:'')});if(k==='Ảnh Avatar'&&c.avatarSource)rows.push({t:'Xem ảnh trong album Facebook',url:c.avatarSource});let urls=c.media[k]||[];if(!urls.length)rows.push({t:characterMissing});for(const src of urls){let im=(c.pics[k]||[]).find(i=>(i.original||i.src)===src);rows.push(im?{t:'',im}:{t:'Mở ảnh trên Facebook',url:src})}}return rows}
