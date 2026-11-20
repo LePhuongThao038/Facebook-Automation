@@ -76,6 +76,10 @@ Chi tiết: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md). Kiến trúc: [docs/FLOW.m
 - Khi làm, tách rõ: **Story đang hiện (24 giờ)**, **Story Archive sau hết hạn**, **Highlight/album nổi bật** và nguồn media của từng slide. Ghi link/ID, thứ tự, ngày giờ, loại ảnh/video và trạng thái truy cập. Không gom mã của cột đề xuất/gợi ý hoặc bài khác vào Media JSON.
 - Dữ liệu profile/Story thực tế cần test bằng Playwright trên Facebook thật, không chỉ test DOM giả lập.
 
+## Đăng Story (FB Desk, 20/11, chưa chạy trên Facebook thật)
+
+Vùng riêng: tab **04 Đăng Story** (`story-ui.js`), dữ liệu `d.stories`, tệp trong IndexedDB `desk-story-files` (`story-files.js`), mô hình `story-model.js`, lượt chạy `kind:'story'` (nhánh riêng trong `runner.js`, các bước `story-*` trong `facebook-bot.js`, lệnh `bot-story-schedule`/`bot-story-confirm` trong `automation.js`, `story-list/add/remove/move` trong `background.js`). Dùng chung hàng chờ, giãn cách bấm, kiểm tra UID và `bot-permit` với bài viết; không đụng luồng bài viết. Chi tiết và việc cần kiểm chứng: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md).
+
 ## Quy tắc khi sửa và đẩy mã
 
 - **Không push thẳng `main`, không `--force`.** Tạo nhánh, mở pull request.

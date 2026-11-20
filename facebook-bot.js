@@ -324,6 +324,130 @@ export async function facebookBot(action,payload={}){
    const handle=pageId?'':here.pathname.replace(/^\/|\/$/g,'');
    return {ok:true,uid,name,handle,url:location.href};
   }
+  // 3.8.7-story: ĐĂNG STORY trên trang facebook.com/stories/create. Vùng riêng, KHÔNG dùng hộp soạn bài viết.
+  // Không bao giờ bấm thẻ "Tạo tin dạng ảnh" (mở hộp chọn tệp của Windows, bot không điều khiển được): tệp được
+  // đặt thẳng vào ô input[type=file] có sẵn của trang. Chỉ bấm "Chia sẻ lên tin" sau khi bộ điều khiển cấp quyền.
+  if(action.startsWith('story-')){
+   const storyPage=()=>/^\/stories\/create\/?$/.test(location.pathname);
+   const shareName=/^(?:chia sẻ lên tin|chia sẻ vào tin|chia sẻ tin|chia sẻ lên tin của bạn|share to story|share story|share to your story)$/i;
+   const discardName=/^(?:bỏ|bỏ tin|hủy|discard|discard story|cancel)$/i;
+   const textCardName=/^(?:tạo tin dạng văn bản|create a text story)$/i;
+   const photoCardName=/^(?:tạo tin dạng ảnh|create a photo story)$/i;
+   const failure=/không thể chia sẻ|không thể đăng|không đăng được|chưa thể chia sẻ|couldn.t (?:share|post|upload)|can.t (?:share|post|upload)|something went wrong|đã xảy ra lỗi|có lỗi xảy ra|không được hỗ trợ|not supported|định dạng không/i;
+   const busyText=/đang chia sẻ|đang đăng|đang tải lên|đang xử lý|sharing|posting|uploading|processing/i;
+   const cards=re=>all('[role="button"],button,[tabindex="0"]').filter(e=>re.test(label(e))&&String(e.innerText||'').length<80);
+   const shares=()=>{const m=buttons().filter(e=>shareName.test(label(e)));return m.filter(e=>!m.some(o=>o!==e&&e.contains(o)));};
+   const busy=()=>all('[role="progressbar"]').length>0||all('[role="status"],[role="alert"],[aria-live],[role="dialog"]').some(e=>busyText.test(e.innerText||''));
+   const alertBox=()=>all('[role="alert"],[role="alertdialog"],[role="dialog"]').find(e=>failure.test(e.innerText||''));
+   const textField=()=>{const f=all('textarea,[contenteditable="true"]').filter(e=>!e.closest('[role="combobox"],[role="search"],[role="banner"],nav'));const named=f.filter(e=>/bắt đầu nhập|start typing|nhập nội dung|type something/i.test(label(e)+' '+(e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-placeholder')||'')));return named.length===1?named[0]:f.length===1?f[0]:null;};
+   const fieldText=e=>e?(e.tagName==='TEXTAREA'||e.tagName==='INPUT'?e.value:editorText(e)):'';
+   const previews=()=>all('img,video,canvas',document.querySelector('[role="main"]')||document.body).filter(e=>{const r=e.getBoundingClientRect();return r.width>=120&&r.height>=120&&!e.closest('[role="navigation"],[role="banner"],nav');}).length;
+   const ready=()=>{const s=shares(),enabled=s.filter(e=>!disabled(e)),a=alertBox();const status=a?'error':s.length>1?'ambiguous-button':!s.length?'missing-button':!enabled.length?'disabled-button':busy()?'busy':'ready';return {status,button:status==='ready'?enabled[0]:null,candidates:s.map(e=>({label:label(e).slice(0,80),disabled:disabled(e)})),error:a?String(a.innerText||'').replace(/\s+/g,' ').slice(0,160):''};};
+   const diag=()=>{try{const r=ready();return {stage:action,status:r.status,page:location.pathname,visibility:document.visibilityState,language:document.documentElement.lang||'',viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},candidates:r.candidates,previews:previews(),fileInputs:[...document.querySelectorAll('input[type="file"]')].map(i=>i.accept||'*').slice(0,6),visibleButtons:buttons().map(e=>label(e).slice(0,60)).filter(Boolean).slice(0,25)};}catch{return {stage:action,status:'diagnostic-unavailable'};}};
+   const storyActor=()=>{const want=actorUid(),me=sessionUid();if(!want)throw Error('Nick liên kết chưa có UID. Bấm "Liên kết tài khoản" lại (tự lấy UID) rồi xếp Story.');if(!me)throw Error('Chrome Profile này chưa đăng nhập Facebook.');if(want!==me)throw Error('Sai tài khoản đăng: Facebook đang đăng nhập UID '+me+', khác nick đã liên kết (UID '+want+').');rememberActor();};
+   const expected=Array.isArray(payload.expectedMedia)?payload.expectedMedia:[];
+   const proofOf=()=>{if(!expected.length)return {jobId:payload.jobId,token:payload.token,count:0,images:0,videos:0,proofId:''};const p=globalThis.__deskMediaProof;if(!p||p.jobId!==payload.jobId||p.token!==payload.token||JSON.stringify(p.expected)!==JSON.stringify(expected))throw Error('Dừng an toàn: chưa có bằng chứng tải tệp Story của lượt này.');return {jobId:payload.jobId,token:payload.token,count:expected.length,images:expected.filter(t=>t==='image').length,videos:expected.filter(t=>t==='video').length,proofId:p.id};};
+   const textOk=()=>payload.storyKind!=='text'||norm(fieldText(textField()))===norm(payload.text);
+   try{
+    if(action==='story-open'){
+     if(!storyPage())throw Error('Không ở trang tạo tin (facebook.com/stories/create).');
+     storyActor();
+     await wait(()=>cards(textCardName).length||cards(photoCardName).length||document.querySelector('input[type="file"]')||shares().length,20000).catch(()=>{throw Error('Trang tạo tin chưa hiện lựa chọn "Tạo tin dạng ảnh / văn bản".');});
+     if(shares().length)throw Error('Trang tạo tin đang có bản nháp khác. Bot không ghi đè; bỏ bản nháp đó trước.');
+     document.documentElement.dataset.facebookDeskJob=payload.jobId;document.documentElement.dataset.facebookDeskToken=payload.token;
+     if(payload.storyKind==='text'){
+      const card=cards(textCardName);if(card.length!==1)throw Error('Không xác định duy nhất thẻ "Tạo tin dạng văn bản".');
+      botClick(card[0]);await wait(()=>textField(),15000).catch(()=>{throw Error('Đã mở tin dạng văn bản nhưng chưa thấy ô nhập chữ.');});
+     }
+     return {ok:true,uiDiagnostic:diag()};
+    }
+    cancel();storyActor();
+    if(action==='story-text'){
+     const f=textField();if(!f)throw Error('Không thấy ô nhập chữ của tin.');if(fieldText(f).trim())throw Error('Ô nhập chữ của tin đã có nội dung.');
+     if(f.isContentEditable)await fillText(f,payload.text);else inputValue(f,payload.text);
+     await wait(textOk,5000).catch(()=>{throw Error('Chữ trong tin chưa khớp sau khi điền.');});
+     return {ok:true};
+    }
+    if(action==='story-upload'){
+     if(payload.files?.length!==1)throw Error('Mỗi tin chỉ tải đúng 1 tệp.');
+     const f=payload.files[0];let file;
+     if(f.transferId){const record=globalThis.__deskStagedFiles?.get(f.transferId);if(!record||record.next!==f.chunks||record.size!==f.size)throw Error('Chưa chuyển đủ tệp '+f.name);file=new File(record.parts,f.name,{type:f.type});}
+     else file=new File([Uint8Array.from(atob(f.base64),c=>c.charCodeAt(0))],f.name,{type:f.type});
+     const accepts=input=>!input.accept||input.accept.split(',').some(v=>{v=v.trim().toLowerCase();return v===file.type||v===file.type.split('/')[0]+'/*'||(v.startsWith('.')&&file.name.toLowerCase().endsWith(v));});
+     const inputs=[...document.querySelectorAll('input[type="file"]')].filter(i=>!i.disabled&&!i.closest('[role="dialog"]')&&accepts(i));
+     if(!inputs.length){const any=[...document.querySelectorAll('input[type="file"]')].map(i=>i.accept||'*');throw Error(file.type.startsWith('video/')?'Trang tạo tin của Facebook trên máy này không nhận video (ô chọn tệp chỉ nhận: '+(any.join(' | ')||'không có')+'). Chưa đăng.':'Không thấy ô chọn ảnh của trang tạo tin. Chưa đăng.');}
+     const dt=new DataTransfer();dt.items.add(file);inputs[0].files=dt.files;inputs[0].dispatchEvent(new Event('input',{bubbles:true}));inputs[0].dispatchEvent(new Event('change',{bubbles:true}));
+     const video=file.type.startsWith('video/');
+     await wait(()=>{const a=alertBox();if(a)throw Error('Facebook báo lỗi khi nhận tệp: '+String(a.innerText||'').replace(/\s+/g,' ').slice(0,160));return shares().length>0;},video?120000:45000).catch(e=>{throw Error(/báo lỗi/.test(e.message)?e.message:'Facebook chưa mở trình chỉnh sửa tin sau khi nhận tệp. Chưa đăng.');});
+     for(const x of payload.files)if(x.transferId)globalThis.__deskStagedFiles?.delete(x.transferId);
+     let stable=0;const start=Date.now();
+     while(Date.now()-start<(video?900000:120000)){await sleep(1000);cancel();const r=ready();if(r.status==='error')throw Error('Facebook báo lỗi khi xử lý tệp: '+r.error);stable=r.status==='ready'?stable+1:0;
+      if(stable>=2){const proof={id:crypto.randomUUID(),jobId:payload.jobId,token:payload.token,expected,count:expected.length};globalThis.__deskMediaProof=proof;return {ok:true,count:expected.length,proofId:proof.id,uiDiagnostic:diag()};}}
+     throw Error('Tệp chưa xử lý xong trên trang tạo tin ['+ready().status+']. Chưa đăng.');
+    }
+    if(action==='story-check'){
+     if(!textOk())throw Error('Chữ trong tin đã thay đổi trước khi đăng.');proofOf();
+     const r=await wait(()=>{const x=ready();return x.status==='ready'||x.status==='error'?x:null;},20000).catch(()=>ready());
+     if(r.status!=='ready')throw Error('Nút "Chia sẻ lên tin" chưa bấm được ['+r.status+(r.error?': '+r.error:'')+'].');
+     return {ok:true,uiDiagnostic:diag()};
+    }
+    if(action==='story-commit'){
+     if(globalThis.__deskSubmitAttempt?.jobId===payload.jobId&&globalThis.__deskSubmitAttempt.token===payload.token)throw Error('Lượt này đã bấm Chia sẻ; không bấm lần hai.');
+     let permission;const permitStart=Date.now();
+     do{
+      if(Date.now()-permitStart>300000)throw Error('Chờ quyền bấm Chia sẻ quá 5 phút (giãn cách thao tác chưa mở). Chưa bấm.');
+      cancel();const restriction=globalThis.deskRestriction?.();if(restriction)throw Error(restriction);
+      storyActor();if(!textOk())throw Error('Chữ trong tin đã thay đổi trong lúc chờ.');
+      const r=ready();if(r.status!=='ready')throw Error('Dừng an toàn: nút "Chia sẻ lên tin" chưa sẵn sàng ['+r.status+'].');
+      permission=await chrome.runtime.sendMessage({type:'bot-permit',jobId:payload.jobId,token:payload.token,mediaProof:proofOf(),audienceProof:{jobId:payload.jobId,token:payload.token,mode:'default'}});
+      if(permission?.data?.waitMs){let left=Math.min(120000,permission.data.waitMs);while(left>0){const part=Math.min(250,left);await sleep(part);left-=part;cancel();}}
+     }while(permission?.data?.waitMs);
+     if(!permission?.ok)throw Error(permission?.error||'Bot đã dừng hoặc lượt đăng đã được sử dụng.');
+     let b;
+     try{cancel();storyActor();if(!textOk())throw Error('Dừng an toàn: chữ trong tin đã thay đổi.');proofOf();const r=ready();b=r.button;if(!b)throw Error('Dừng an toàn: nút "Chia sẻ lên tin" đã thay đổi ['+r.status+'].');const cover=coveredBy(b);if(cover)throw Error('Dừng an toàn: nút "Chia sẻ lên tin" đang bị che ('+cover+').');}
+     catch(error){await chrome.runtime.sendMessage({type:'bot-abort-before-click',jobId:payload.jobId,token:payload.token,reason:error.message}).catch(()=>{});throw error;}
+     globalThis.__deskSubmitAttempt={jobId:payload.jobId,token:payload.token,at:Date.now()};
+     b.scrollIntoView({block:'center',inline:'nearest'});botClick(b);void chrome.runtime.sendMessage({type:'bot-clicked',jobId:payload.jobId,token:payload.token}).catch(()=>{});
+     return {ok:true,clicked:true,uiDiagnostic:diag()};
+    }
+    // Sau khi bấm: Facebook rời trang tạo tin (hoặc bỏ nút Chia sẻ) khi đã nhận tin. Có báo lỗi thì dừng, không bấm lại.
+    if(action==='story-published'){
+     const start=Date.now(),limit=Math.max(15000,Math.min(900000,Number(payload.timeoutMs)||180000));let gone=0;
+     while(Date.now()-start<limit){
+      const restriction=globalThis.deskRestriction?.();if(restriction)throw Error(restriction);
+      const a=alertBox();if(a)throw Error('Facebook báo lỗi sau khi bấm Chia sẻ: '+String(a.innerText||'').replace(/\s+/g,' ').slice(0,160));
+      const open=busy()||(storyPage()&&shares().length>0);gone=open?0:gone+1;
+      if(gone>=4)return {ok:true,published:true,waitedMs:Date.now()-start,page:location.pathname};
+      await sleep(500);
+     }
+     return {ok:true,published:false,waitedMs:Date.now()-start};
+    }
+    // CHẠY THỬ: không bao giờ bấm Chia sẻ. Chụp cấu trúc (ẩn chữ của tin, tên nick, dãy số dài) rồi bỏ bản nháp.
+    if(action==='story-snapshot'){
+     const secret=[payload.actor?.name,payload.text].map(norm).filter(v=>v&&v.length>=3);
+     const scrub=v=>{let t=String(v||'').replace(/\s+/g,' ').trim();if(!t)return '';if(secret.some(x=>norm(t).includes(x)))return '[nội dung tin]';return t.replace(/\d{6,}/g,'[số]').slice(0,90);};
+     const kind=src=>/^blob:/.test(src)?'blob':/^data:/.test(src)?'data':/fbcdn|scontent/.test(src)?'fbcdn':src?'khác':'';
+     const outline=[];const walk=(el,depth)=>{if(outline.length>=700||depth>40)return;const r=el.getBoundingClientRect();const item={d:depth,t:el.tagName.toLowerCase()};const role=el.getAttribute('role');if(role)item.role=role;const aria=el.getAttribute('aria-label');if(aria)item.aria=scrub(aria);
+      if(el.matches('img,video,canvas')){item.w=Math.round(r.width);item.h=Math.round(r.height);item.src=kind(el.currentSrc||el.src||el.poster||'');}
+      if(el.matches('input[type=file]'))item.accept=el.accept||'';if(el.matches('textarea'))item.placeholder=scrub(el.placeholder);
+      if(el.isContentEditable&&el.getAttribute('contenteditable')==='true'){item.editor=true;outline.push(item);return;}
+      if(!el.children.length){const text=(el.textContent||'').trim();if(text)item.text=scrub(text);}
+      if(el.matches('button,[role=button]'))item.label=scrub(label(el));if(el.closest('[aria-disabled="true"]')===el)item.disabled=true;
+      outline.push(item);for(const c of el.children)if(visible(c)||c.matches('input[type=file]'))walk(c,depth+1);};
+     walk(document.querySelector('[role="main"]')||document.body,0);
+     return {ok:true,snapshot:{schema:'desk.ui-snapshot/1',kind:'story',at:new Date().toISOString(),...diag(),nodes:outline.length,outline}};
+    }
+    if(action==='story-discard'){
+     if(!shares().length)return {ok:true,discarded:true};
+     const own=buttons().filter(e=>discardName.test(label(e))&&!e.closest('[role="dialog"],[role="alertdialog"]'));
+     if(!own.length)throw Error('Không thấy nút "Bỏ" của trình tạo tin để bỏ bản nháp chạy thử.');
+     botClick(own[0]);const deadline=Date.now()+15000;
+     while(Date.now()<deadline){await sleep(400);const confirm=all('[role="dialog"],[role="alertdialog"]').flatMap(d=>buttons(d)).find(e=>/^(?:bỏ|bỏ tin|discard|discard story|xác nhận|confirm)$/i.test(label(e))&&!disabled(e));if(confirm){botClick(confirm);await sleep(600);}if(!shares().length)return {ok:true,discarded:true};}
+     throw Error('Chưa bỏ được bản nháp tin chạy thử. Hãy tự bấm Bỏ trên trang tạo tin.');
+    }
+    throw Error('Thao tác Story không hợp lệ.');
+   }catch(error){return {ok:false,error:error.message,action,uiDiagnostic:diag()};}
+  }
   if(action==='open'||action==='resume-open'){
    let actor;const quick=quickActor();
    if(quick==='mismatch')throw Error('Sai tài khoản đăng: Facebook đang đăng nhập UID '+sessionUid()+'.');

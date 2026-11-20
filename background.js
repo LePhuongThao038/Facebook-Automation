@@ -14,6 +14,8 @@ import {sourceChanges} from './source-changes.js';
 import {refreshSourceMedia} from './source-media.js';
 import {isNewSource,replacePendingPosts} from './replace-pending.js';
 import {facebookBot} from './facebook-bot.js';
+import {getStoryFile,deleteStoryFile} from './story-files.js';
+import {storyMediaType,storyFromLink,validStory,STORY_IMAGE_MB,STORY_VIDEO_MB} from './story-model.js';
 import {waitFacebookTab} from './tab-ready.js';
 import {applyCaptionNames} from './caption-name-filter.js';
 import {docsSource,DEFAULT_SOURCE,fbUrl,safeUrl,parseTime,fillMissingContent,cleanCaption,setManualCaption} from './scenario.js';
@@ -43,7 +45,7 @@ async function db(){const d=(await chrome.storage.local.get('deskV2')).deskV2||d
 async function write(d){await captionNames(d);for(const p of d.posts)if(['draft','error','scheduled','queued'].includes(p.state)){fillMissingContent(p);cleanCaption(p);fillMissingContent(p);}if(d.bot&&!d.bot.enabled)for(const j of d.bot.jobs.filter(j=>j.state==='queued')){const p=d.posts.find(p=>p.id===j.postId);if(p&&p.state!=='success'){j.post=structuredClone(p);j.expectedMedia=p.media.map(m=>m.type);p.state='queued';}}await chrome.storage.local.set({deskV2:d,deskBotSummary:botSummary(d)});}
 // 3.8.6: tóm tắt nhỏ để runner hỏi việc mỗi 2 giây mà không phải đọc + làm sạch toàn bộ dữ liệu (nguyên nhân lag).
 function botSummary(d){const b=d.bot||{};const jobs=b.jobs||[];const active=jobs.some(j=>['running','verifying'].includes(j.state));const due=jobs.filter(j=>j.state==='queued').map(j=>Date.parse(j.dueAt)).filter(Number.isFinite);return {enabled:Boolean(b.enabled),active,nextDue:due.length?Math.min(...due):null,at:Date.now()};}
-function event(d,p,status,message,url=''){d.logs.unshift({id:crypto.randomUUID(),at:new Date().toISOString(),postId:p?.id||'',title:p?.title||'Hệ thống',status,message,url});d.logs=d.logs.slice(0,2000);}
+function event(d,p,status,message,url=''){d.logs.unshift({id:crypto.randomUUID(),at:new Date().toISOString(),postId:p?.id||'',title:p?.title||'Hệ thống',status,message,url,...(p?.storyKind?{kind:'story'}:{})});d.logs=d.logs.slice(0,2000);}
 function assertEditable(d,id){if(d.posts.some(p=>p.id===id&&p.state==='success')||d.bot?.jobs.some(j=>j.postId===id&&j.state==='success'))throw Error('Bài đã đăng, không thể đăng lại.');if(d.bot?.jobs.some(j=>j.postId===id&&!['success','failed','cancelled'].includes(j.state)&&!(j.state==='queued'&&!d.bot.enabled)))throw Error('Bài đang có lượt bot hoặc cần đối soát. Hủy lượt chưa chạy hoặc đối soát trước.');}
 const automation=createAutomation({db,write,lock,event,mediaFile,mediaChunk:transferChunk,mediaRelease:releaseTransfers,chooseAI:async(kind,target,options,settings)=>chooseFacebookOption(kind,target,options,settings,await key(settings)),planAI:async(input,settings)=>planWithAI(input,settings,await key(settings))});
 async function key(settings){
@@ -104,6 +106,14 @@ async function resolveVideoSource(sourceUrl,signal){
  }catch{return sourceUrl;}
 }
 async function mediaFile(m,index,{signal,owner='manual'}={}){
+ // 3.8.7-story: tệp người dùng chọn từ máy cho Story (IndexedDB riêng), không tải qua mạng.
+ if(m?.storyFileId){
+  const rec=await getStoryFile(m.storyFileId);if(!rec?.blob)throw Error('Tệp của tin không còn trên máy. Xóa tin này và thêm lại tệp.');
+  const type=rec.blob.type||rec.type,kind=storyMediaType(type);if(kind!==m.type)throw Error('Tệp của tin không đúng loại '+m.type+'.');
+  const limit=kind==='video'?STORY_VIDEO_MB:STORY_IMAGE_MB;if(rec.blob.size>limit*1024*1024)throw Error('Tệp của tin vượt '+limit+' MB.');
+  const extension=({'video/quicktime':'mov','image/jpeg':'jpg','video/x-m4v':'m4v'})[type]||type.split('/')[1];
+  return storeTransfer(rec.blob,{type,name:'story-'+(index+1)+'.'+extension},owner);
+ }
  let url;try{url=mediaFetchUrl(m?.url);}catch(e){throw Error('Tệp '+(index+1)+': '+e.message);}if(!url)throw Error('Media không có liên kết HTTPS hợp lệ.');
  let r;
  if(m.manifest){
@@ -256,6 +266,42 @@ async function handle(msg,sender){
  if(msg.type==='runner-claim'){const {deskBotSummary:s}=await chrome.storage.local.get('deskBotSummary');if(s&&(!s.enabled||s.active||s.nextDue===null||s.nextDue>Date.now()))return null;}
  if(msg.type?.startsWith('bot-')||msg.type?.startsWith('runner-'))return automation.handle(msg,sender);
  if(['ai','post-update','schedule','cancel-schedule','confirm-post','prepare','delete-post'].includes(msg.type)){const current=await db();if(current.bot?.jobs.some(j=>j.postId===msg.id&&!['success','failed','cancelled'].includes(j.state)))throw Error('Bài đã vào hàng chờ bot hoặc cần đối soát. Hủy lượt chưa chạy hoặc đối soát trước khi sửa/xóa/thao tác thủ công.');}
+ // 3.8.7-story: vùng ĐĂNG STORY (tách khỏi bài viết). Chỉ bảng điều khiển được thêm/xóa/sắp xếp tin.
+ if(msg.type?.startsWith('story-')){
+  if(sender.url!==chrome.runtime.getURL('dashboard.html'))throw Error('Chỉ quản lý Story từ bảng điều khiển.');
+  if(msg.type==='story-list'){const d=await db();return {stories:d.stories||[],jobs:(d.bot?.jobs||[]).filter(j=>j.kind==='story').map(publicJob),actor:d.bot?.actor||null,enabled:Boolean(d.bot?.enabled)};}
+  const busy=(d,id)=>(d.bot?.jobs||[]).some(j=>j.postId===id&&!['success','failed','cancelled'].includes(j.state));
+  if(msg.type==='story-add')return lock(async()=>{
+   const d=await db();d.stories||=[];const items=msg.items;
+   if(!Array.isArray(items)||!items.length||items.length>50)throw Error('Thêm từ 1 đến 50 tin mỗi lần.');
+   if(d.stories.length+items.length>300)throw Error('Danh sách Story tối đa 300 tin. Xóa bớt tin đã đăng.');
+   const added=[];
+   for(const it of items){
+    let s;
+    if(it?.kind==='text')s={kind:'text',text:String(it.text||'').trim(),media:[]};
+    else if(it?.fileId){
+     const rec=await getStoryFile(it.fileId);if(!rec)throw Error('Không thấy tệp vừa chọn. Chọn lại tệp.');
+     const kind=storyMediaType(rec.type);if(!kind){await deleteStoryFile(rec.id);throw Error('Tệp "'+rec.name+'" không phải ảnh (jpg, png, webp, gif, heic) hoặc video (mp4, mov, webm).');}
+     const limit=kind==='video'?STORY_VIDEO_MB:STORY_IMAGE_MB;if(rec.size>limit*1024*1024){await deleteStoryFile(rec.id);throw Error('Tệp "'+rec.name+'" vượt '+limit+' MB.');}
+     s={kind,name:rec.name,size:rec.size,media:[{type:kind,storyFileId:rec.id,name:rec.name}]};
+    }else if(it?.link)s=storyFromLink(it.link);
+    else throw Error('Tin không hợp lệ.');
+    s.id=crypto.randomUUID();s.createdAt=new Date().toISOString();validStory(s);added.push(s);
+   }
+   d.stories.push(...added);await write(d);return added;
+  });
+  if(msg.type==='story-remove')return lock(async()=>{
+   const d=await db(),s=(d.stories||[]).find(x=>x.id===msg.id);if(!s)return true;
+   if(busy(d,s.id))throw Error('Tin đang trong hàng chờ hoặc cần xác nhận. Hủy lượt hoặc xác nhận trước khi xóa.');
+   for(const m of s.media||[])if(m.storyFileId)await deleteStoryFile(m.storyFileId).catch(()=>{});
+   d.stories=d.stories.filter(x=>x.id!==s.id);await write(d);return true;
+  });
+  if(msg.type==='story-move')return lock(async()=>{
+   const d=await db(),list=d.stories||[],i=list.findIndex(x=>x.id===msg.id),k=i+(msg.dir<0?-1:1);
+   if(i<0||k<0||k>=list.length)return true;[list[i],list[k]]=[list[k],list[i]];await write(d);return true;
+  });
+  throw Error('Yêu cầu Story không hợp lệ.');
+ }
  if(msg.type==='state'){const d=await db();return {...d,...(d.bot?{bot:{...d.bot,jobs:d.bot.jobs.map(publicJob)}}:{}),keyConfigured:!!(await key()),rememberKey:!!(await chrome.storage.local.get('apiKey')).apiKey};}
  if(msg.type==='settings')return lock(async()=>{
   const d=await db();if(!['manual','web','team'].includes(msg.settings.mode))throw Error('Chế độ AI không hợp lệ.');

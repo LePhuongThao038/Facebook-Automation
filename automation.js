@@ -6,6 +6,7 @@ import {findPublished} from './published-link.js';
 import {resetCandidate,resetCopy,botDefaults,createJob,dueJob,canonicalPost,publicJob,terminalStates} from './automation-model.js';
 import {facebookBot} from './facebook-bot.js';
 import {fbUrl,docsSource,cleanCaption,fillMissingContent} from './scenario.js';
+import {createStoryJob} from './story-model.js';
 import {planningInput,needsScheduleAI,directPlan,validatePlan,assignSlots,canClaim,submitWaitMs,advanceDefaultQueue,DEFAULT_INTERVAL_MINUTES,DEFAULT_GAP_MS} from './posting-plan.js';
 export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,mediaRelease,planAI,chooseAI}){
  const transfers=new Map();
@@ -52,7 +53,7 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
    // tối đa 3 bài/lượt, làm runner phải chờ và đẩy nhịp 3 phút lên 5-8 phút. Nay chỉ tìm khi không có bài
    // nào đang chạy hoặc sắp tới lượt trong 4 phút, và mỗi lượt chỉ 1 bài.
    if(!jobId){const b0=bot(d),now0=Date.now();if(b0.jobs.some(j=>active(j)||(j.state==='queued'&&runnable(b0,j)&&Date.parse(j.dueAt)-now0<240000)))return;}
-   const pending=j=>j.submittedAt && (['unknown','partial'].includes(j.state)||(j.state==='success'&&j.verification?.published&&(j.lookupAttempts||0)<4)) && !j.postUrl;
+   const pending=j=>j.kind!=='story' && j.submittedAt && (['unknown','partial'].includes(j.state)||(j.state==='success'&&j.verification?.published&&(j.lookupAttempts||0)<4)) && !j.postUrl;
    const short=j=>String(j.post.text||'').normalize('NFKC').replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\p{Default_Ignorable_Code_Point}\s]/gu,'').toLowerCase().length<2;
    const due=bot(d).jobs.filter(j=>pending(j)&&(jobId||!short(j)||j.receiptLinks?.length===1)&&(jobId?j.id===jobId:(!j.lookupAt||Date.now()>=(j.nextLookup||0))))
     .sort((a,b)=>(a.lookupAt||0)-(b.lookupAt||0)).slice(0,1);
@@ -190,6 +191,31 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
    });
    await ensureRunner();return result;
   }
+  // 3.8.7-story: xếp lịch vùng ĐĂNG STORY. Tin nằm ở d.stories; lượt chạy dùng chung hàng chờ/giãn cách với bài viết.
+  if(msg.type==='bot-story-schedule'){
+   const actor=await detectActor();
+   const result=await lock(async()=>{
+    const d=await db(),b=bot(d),ids=msg.ids,mode=msg.mode;
+    if(!['now','schedule','dry'].includes(mode))throw Error('Chế độ xếp tin không hợp lệ.');
+    if(!Array.isArray(ids)||!ids.length||ids.length>50||new Set(ids).size!==ids.length)throw Error('Chọn từ 1 đến 50 tin khác nhau.');
+    if(mode==='dry'&&ids.length!==1)throw Error('Chạy thử từng tin một.');
+    if(b.jobs.some(j=>!terminalStates.includes(j.state)&&j.actor.url!==actor.url))throw Error('Tài khoản hàng chờ khác tài khoản Facebook hiện tại.');
+    const stories=ids.map(id=>{const s=(d.stories||[]).find(x=>x.id===id);if(!s)throw Error('Không tìm thấy tin.');return s;});
+    const minutes=Number(msg.intervalMinutes??3);if(!Number.isSafeInteger(minutes)||minutes<1||minutes>1440)throw Error('Khoảng cách giữa các tin phải từ 1 đến 1440 phút.');
+    const now=Date.now();let start=now;
+    if(mode==='schedule'){start=Date.parse(msg.startAt);if(!Number.isFinite(start)||start<now-60000||start>now+15*86400000)throw Error('Giờ bắt đầu không hợp lệ (trong vòng 15 ngày tới).');start=Math.max(start,now);}
+    const staged=[];
+    stories.forEach((s,i)=>staged.push(createStoryJob(s,actor,[...b.jobs,...staged],{dueAt:start+i*minutes*60000,scheduleMode:mode==='schedule'?'manual':'now',minGapMs:mode==='schedule'?0:60000,dryRun:mode==='dry'},now)));
+    b.jobs.push(...staged);
+    if(!b.enabled){b.cardsOnly=true;for(const other of b.jobs)if(!staged.includes(other))other.cardScheduled=false;}
+    b.enabled=true;b.actor=actor;b.plan=null;
+    for(const j of staged)event(d,j.post,'queued',(mode==='dry'?'Chạy thử Story':'Story đã lên lịch')+': '+j.dueAt);
+    await write(d);return staged.map(publicJob);
+   });
+   await ensureRunner();return result;
+  }
+  // Story không có permalink: lượt "cần đối soát" được người dùng xác nhận bằng tay sau khi xem Tin trên Facebook.
+  if(msg.type==='bot-story-confirm')return lock(async()=>{const d=await db(),j=job(d,msg.jobId);if(j.kind!=='story'||!j.submittedAt||!['unknown','partial'].includes(j.state))throw Error('Lượt Story này không cần xác nhận.');j.state='success';j.manualReconciliation=true;j.error='';event(d,j.post,'success','Người dùng xác nhận tin đã lên Facebook.');await write(d);return true;});
   if(msg.type==='bot-start'){const currentActor=await detectActor();await lock(async()=>{const d=await db(),b=bot(d);if(!b.actor)b.actor=currentActor;if(b.jobs.some(j=>j.state==='queued'&&j.actor.url!==currentActor.url))throw Error('Nick hiện tại khác nick của hàng chờ. Hủy hàng chờ cũ rồi tạo lại.');b.pauseReason='';b.cardsOnly=false;b.enabled=true;await write(d);});await ensureRunner();return true;}
   if(msg.type==='bot-pause')return pause();
   if(msg.type==='bot-cancel')return lock(async()=>{const d=await db(),j=job(d,msg.jobId);if(j.state!=='queued')throw Error('Chỉ hủy được bài chưa chạy. Dùng Dừng bot cho bài đang xử lý.');j.state='cancelled';const p=d.posts.find(p=>p.id===j.postId);if(p)p.state='draft';event(d,j.post,'cancelled','Đã hủy lượt tự đăng.');await write(d);return true;});

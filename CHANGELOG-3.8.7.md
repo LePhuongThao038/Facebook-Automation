@@ -72,6 +72,15 @@ Docs mẫu bị các lỗi sau: không có thụt lề, chủ trang bị gắn v
 - Bridge lỗi (chưa cài bộ nối, chưa ghép ID…) chỉ hiện thông báo, tự động hóa vẫn bật. Bài video chờ bridge như cũ.
 - ID extension mới phải được ghép một lần bằng `Install-Start-Video.cmd`.
 
+## Đăng Story (vùng riêng, 20/11, không đổi số phiên bản, CHƯA chạy trên Facebook thật)
+
+- Tab mới **04 Đăng Story** trên bảng điều khiển, tách khỏi bài viết: tin nằm ở `d.stories`, không ở danh sách bài; thống kê và nút "Tiếp tục tất cả" của bài viết không tính Story. Báo cáo lịch sử vẫn ghi, có tiền tố "Story ·".
+- Nguồn tin: ảnh/video chọn từ máy (mỗi tệp một tin; ảnh ≤ 25 MB, video ≤ 200 MB, giữ trong IndexedDB `desk-story-files` tới khi xóa tin), link ảnh https, link riêng video/Reel Facebook (Media Bridge dựng MP4), hoặc tin chữ.
+- Xếp lịch: giờ bắt đầu + số phút giữa các tin, hoặc "Đăng ngay"; đổi thứ tự bằng ↑ ↓. "Chạy thử" từng tin: làm tới trước nút "Chia sẻ lên tin", bỏ bản nháp, lưu cấu trúc trang tạo tin (nút "Tải cấu trúc").
+- Bot (`facebook-bot.js`, các bước `story-*`): mở `facebook.com/stories/create`, so UID phiên đăng nhập với UID đã liên kết, đặt tệp thẳng vào ô chọn tệp có sẵn (không bấm thẻ "Tạo tin dạng ảnh" vì sẽ mở hộp chọn tệp của Windows), chờ nút "Chia sẻ lên tin", xin quyền bấm qua cùng cổng `bot-permit` (giãn cách chung với bài viết, ghi `submittedAt` trước khi bấm), bấm 1 lần, chờ Facebook rời trang tạo tin. Facebook báo lỗi thì dừng, không bấm lại. Story không có permalink nên không đi tìm link; lượt "cần xác nhận" có nút "Đã thấy tin trên Facebook".
+- Trang tạo tin chỉ nhận ảnh trên máy đó thì tin video dừng với lý do rõ, chưa đăng.
+- Test: `tests/story-387.mjs` (chạy thật facebookBot trên trang tạo tin giả lập), `tests/story-automation-387.mjs`. **Trang giả lập dựng theo mô tả giao diện, chưa soi trang thật**: hãy "Chạy thử" một tin trên nick thật trước, rồi "Tải cấu trúc" gửi lại để chỉnh test nếu Facebook khác.
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.

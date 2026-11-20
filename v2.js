@@ -79,14 +79,14 @@ function renderCSVProgress(){
 }
 function render(){renderSources();renderCSVProgress();$('ai-status').textContent=state.settings.mode==='team'?'GPT của team':state.settings.mode==='web'?'✦ Gemini web · Auto':state.keyConfigured?'✦ AI API · '+(state.settings.model||'chưa chọn model'):'AI chưa cấu hình';
  if(!frequencyReady){dial.setMinutes(state.bot?.intervalMinutes||DEFAULT_INTERVAL_MINUTES);frequencyReady=true;}dial.setCount(schedulableIds().length);$('bot-pause').hidden=!state.bot?.enabled;
- const paused=(state.bot?.jobs||[]).filter(j=>j.state==='queued'&&(!state.bot.enabled||(state.bot.cardsOnly&&!j.cardScheduled)));
+ const paused=(state.bot?.jobs||[]).filter(j=>j.kind!=='story'&&j.state==='queued'&&(!state.bot.enabled||(state.bot.cardsOnly&&!j.cardScheduled)));
  $('resume-all').hidden=!paused.length;$('pause-reason').hidden=!paused.length;
  if(paused.length){
   $('resume-all').textContent='Tiếp tục tất cả ('+paused.length+')';
   const problem=state.logs.find(l=>['unknown','partial','failed'].includes(l.status));
   $('pause-reason').textContent=state.bot.enabled?'Một số bài chưa được bật tự đăng.':state.bot.pauseReason||('Hàng chờ đang dừng.'+(problem?' Sự cố gần nhất: '+problem.title+' · '+problem.message:''));
  }
- const dates=new Set(state.logs.map(l=>new Date(l.at).toLocaleDateString('en-CA',{timeZone:'Asia/Ho_Chi_Minh'})));$('days').textContent=dates.size;$('success').textContent=new Set(state.logs.filter(l=>l.status==='success').map(l=>l.postId)).size;$('failed').textContent=new Set(state.logs.filter(l=>['error','failed','partial','unknown'].includes(l.status)).map(l=>l.postId)).size;$('post-count').textContent=state.posts.length;
+ const dates=new Set(state.logs.map(l=>new Date(l.at).toLocaleDateString('en-CA',{timeZone:'Asia/Ho_Chi_Minh'})));$('days').textContent=dates.size;$('success').textContent=new Set(state.logs.filter(l=>l.kind!=='story'&&l.status==='success').map(l=>l.postId)).size;$('failed').textContent=new Set(state.logs.filter(l=>l.kind!=='story'&&['error','failed','partial','unknown'].includes(l.status)).map(l=>l.postId)).size;$('post-count').textContent=state.posts.length;
  const query=$('search').value.toLocaleLowerCase('vi'),filter=$('state-filter').value;const byPost=new Map();
  for(const job of state.bot?.jobs||[]){
   if(byPost.get(job.postId)?.state!=='success')byPost.set(job.postId,job);
@@ -138,7 +138,7 @@ function render(){renderSources();renderCSVProgress();$('ai-status').textContent
  $('history').replaceChildren();const shownLogs=visibleLogs();if(!shownLogs.length){const tr=make('tr'),td=make('td',state.logs.length?'Không có dòng lịch sử nào khớp bộ lọc này.':'Chưa có lịch sử. Hoạt động sẽ được ghi khi xử lý hoặc chuẩn bị bài.');td.colSpan=5;tr.append(td);$('history').append(tr);}
  for(const l of shownLogs){const tr=make('tr'),status=make('td'),link=make('td');status.append(make('span',labels[l.status]||l.status,'badge '+l.status));if(safeUrl(l.url)){const a=make('a','Mở bài ↗');a.href=l.url;a.target='_blank';a.rel='noopener noreferrer';link.append(a);}else link.textContent='—';tr.append(make('td',vietnamTime(l.at)),make('td',l.title),status,make('td',logMessage(l)),link);$('history').append(tr);}
 }
-for(const name of ['scenario','friends','comments'])on('tab-'+name,()=>{for(const n of ['scenario','friends','comments']){$(n).hidden=n!==name;$('tab-'+n).classList.toggle('active',n===name);$('tab-'+n).setAttribute('aria-selected',String(n===name));}});
+for(const name of ['scenario','friends','comments','stories'])on('tab-'+name,()=>{for(const n of ['scenario','friends','comments','stories']){$(n).hidden=n!==name;$('tab-'+n).classList.toggle('active',n===name);$('tab-'+n).setAttribute('aria-selected',String(n===name));}});
 on('add-source',async()=>{const sources=sourceValues();sources.push({id:crypto.randomUUID(),url:'',note:''});await request('sources',{sources});sourceDirty=false;await load();});on('save-sources',saveSources);
 on('read-all',async()=>{await saveSources();let failed=0;for(const s of state.sources){try{await readSource(s);}catch{failed++;}}await load();toast(failed?`${failed} nguồn chưa đọc được. Mở nguồn tương ứng để kiểm tra quyền xem.`:'Đã đọc xong các nguồn.');});
 $('search').addEventListener('input',render);$('state-filter').addEventListener('change',render);$('history-filter').addEventListener('change',render);
