@@ -58,12 +58,43 @@ function showRunControl(state){
 }
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[runKey])showRunControl(changes[runKey].newValue);});
 showRunControl((await chrome.storage.local.get(runKey))[runKey]);
+// 3.8.7: "Bật lại tự động hóa" cũng tự mở Media Bridge (như nút Start Video), chạy song song, không chặn việc bật.
+// Bridge lỗi thì chỉ báo; bài ảnh/chữ vẫn đăng được, bài video sẽ chờ bridge như cũ.
+const bridgeNote=document.getElementById('run-bridge');
+const bridgeSay=text=>{if(bridgeNote)bridgeNote.textContent=text;const r=document.getElementById('media-bridge-result');if(r)r.textContent=text;};
+async function bridgeHealth(){
+ const response=await fetch('http://127.0.0.1:47833/health',{credentials:'omit',signal:AbortSignal.timeout(2000)});
+ if(!response.ok)throw Error('Media Bridge trả HTTP '+response.status+(response.status===403?' · ID chưa được ghép.':'.'));
+ const data=await response.json();
+ if(data.schema!=='desk.media/1')throw Error('Cổng 47833 đang chạy chương trình khác.');
+ return data;
+}
+let bridgeStarting=false;
+async function startBridgeWithRun(){
+ if(bridgeStarting)return;bridgeStarting=true;
+ try{
+  try{const data=await bridgeHealth();bridgeSay('Media Bridge đã chạy · MP4 tối đa '+data.maxMB+' MB.');return;}catch{}
+  bridgeSay('Đang mở Media Bridge chạy ngầm…');
+  const response=await chrome.runtime.sendMessage({type:'media-start-video'});
+  if(!response?.ok)throw Error(response?.error||'Extension chưa phản hồi.');
+  const start=Date.now();let lastError='';
+  while(Date.now()-start<180000){
+   try{const data=await bridgeHealth();bridgeSay('Media Bridge sẵn sàng · MP4 tối đa '+data.maxMB+' MB.');return;}catch(error){lastError=error.message;}
+   bridgeSay('Đang mở Media Bridge · '+Math.floor((Date.now()-start)/1000)+' giây.');
+   await new Promise(resolve=>setTimeout(resolve,1000));
+  }
+  throw Error('Chưa kết nối sau 3 phút. '+lastError);
+ }catch(error){bridgeSay('Media Bridge chưa chạy: '+error.message+' Bài ảnh/chữ vẫn đăng; bài video chờ bridge.');}
+ finally{bridgeStarting=false;}
+}
 runButton.onclick=async()=>{
  runButton.disabled=true;
+ const turningOn=!runEnabled;
  try{
-  const result=await chrome.runtime.sendMessage({type:'desk-toggle',enabled:!runEnabled});
+  const result=await chrome.runtime.sendMessage({type:'desk-toggle',enabled:turningOn});
   if(!result?.ok)throw Error(result?.error||'Không đổi được trạng thái.');
   showRunControl(result.data);
+  if(turningOn&&result.data?.enabled===true)startBridgeWithRun();
  }catch(e){document.getElementById('run-state').textContent=e.message;runButton.disabled=false;}
 };
 

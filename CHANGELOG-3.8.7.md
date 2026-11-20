@@ -65,6 +65,13 @@ Docs mẫu bị các lỗi sau: không có thụt lề, chủ trang bị gắn v
 - Liên kết cũ dạng tên rút gọn được tự đổi sang UID ở lần kiểm tra sau, nếu đúng là nick đang đăng nhập.
 - Tên lấy từ nhãn ảnh đại diện. Trên trang của chính mình nhãn đó là "Hành động với ảnh đại diện", nên tên lấy từ dòng chữ lớn ở đầu trang. Đã thử trên trang thật: ra đúng UID và tên.
 
+## "Bật lại tự động hóa" tự mở Media Bridge (20/11, không đổi số phiên bản)
+
+- Bấm **Bật lại tự động hóa**: bật xong, FB Desk kiểm tra Media Bridge (127.0.0.1:47833). Nếu chưa chạy thì tự mở như nút Start Video và báo tiến độ ngay dưới thanh trạng thái.
+- Bridge đang chạy thì không mở lại. Bấm **Tạm dừng toàn bộ** thì không đụng tới bridge.
+- Bridge lỗi (chưa cài bộ nối, chưa ghép ID…) chỉ hiện thông báo, tự động hóa vẫn bật. Bài video chờ bridge như cũ.
+- ID extension mới phải được ghép một lần bằng `Install-Start-Video.cmd`.
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.
