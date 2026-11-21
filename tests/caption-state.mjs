@@ -11,7 +11,8 @@ const post=splitPosts(blocks(true),source)[0];
 assert.equal(post.captionPartial,true);assert.equal(post.text,'Caption đang có…');assert.equal(post.comments.length,1);
 assert.equal(splitPosts(blocks('false'),source)[0].captionPartial,false);
 const actor={url:'https://www.facebook.com/profile.php?id=100001',name:'Test'};
-assert.throws(()=>createJob(post,{},actor,[]),/Có caption.*rút gọn/);
+// 3.8.7-cap: caption rút gọn được vào hàng chờ; runner lấy caption đầy đủ trước khi đăng.
+assert.doesNotThrow(()=>createJob(post,{},actor,[]));
 setManualCaption(post,post.text);assert.equal(post.captionPartial,true,'saving unchanged text cannot silently clear source warning');
 setManualCaption(post,'Caption đã sửa hoàn chỉnh #hashtag');
 assert.equal(post.text,'Caption đã sửa hoàn chỉnh');assert.equal(post.captionPartial,false);

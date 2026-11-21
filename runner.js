@@ -7,9 +7,33 @@ import {canonicalPost,captionIssue,mediaOnlyPost,normalizedProfile} from './auto
 import {facebookBot} from './facebook-bot.js';
 import {waitFacebookTab} from './tab-ready.js';
 import {STORY_CREATE_URL} from './story-model.js';
+import {truncatedPrefix,acceptRecovered,isVideoSource,readFullCaption} from './full-caption.js';
 const status=document.getElementById('status');const sleep=ms=>new Promise(r=>setTimeout(r,ms));let running=false;
+// 3.8.7-cap: thứ tự thử: Media Bridge (Reel/video) → mở bài gốc bằng phiên đăng nhập → đăng đoạn đã có, bỏ "…".
+async function recoverFullCaption(j){
+ const prefix=truncatedPrefix(j.post.sourceCaption||j.post.text);
+ const video=(j.post.media||[]).find(m=>m.type==='video'&&m.manifest?.sourceUrl)?.manifest?.sourceUrl;
+ const source=j.post.sourcePostUrl||'';
+ for(const url of [video,isVideoSource(source)?source:''].filter(Boolean)){
+  try{const r=await fetch('http://127.0.0.1:47833/probe',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema:'desk.media/1',kind:/\/reels?\//.test(url)?'reel':'video',sourceUrl:url}),signal:AbortSignal.timeout(90000)});
+   if(r.ok){const info=await r.json();if(info?.captionKnown&&acceptRecovered(prefix,info.caption))return {text:String(info.caption).trim(),method:'media-bridge'};}}catch{}
+ }
+ if(/^https:\/\/(?:www\.)?facebook\.com\//.test(source)){
+  let tab;
+  try{
+   tab=await openWorkTab({url:source,active:true},j.id,true);await loaded(tab.id);
+   for(let attempt=0;attempt<12;attempt++){
+    const [read]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:readFullCaption,args:[{prefix,expand:attempt<6}]}).catch(()=>[{}]);
+    const got=read?.result||{};
+    if(got.found&&acceptRecovered(prefix,got.text))return {text:got.text,method:'source-page'};
+    await sleep(got.expanding?1200:800);
+   }
+  }catch{}finally{if(tab)await closeWorkTab(tab.id).catch(()=>{});}
+ }
+ return {text:prefix,method:'trimmed'};
+}
 // 3.8.6: service worker MV3 có thể khởi động lại giữa lượt; thử lại các lệnh an toàn thay vì đánh lỗi cả bài.
-const RETRYABLE=['runner-caption','runner-touch','runner-progress','runner-media','runner-media-chunk','runner-media-release','runner-finish','posting-clean-children'];
+const RETRYABLE=['runner-caption','runner-full-caption','runner-touch','runner-progress','runner-media','runner-media-chunk','runner-media-release','runner-finish','posting-clean-children'];
 async function rpc(type,values={}){for(let attempt=0;;attempt++){let r;try{r=await chrome.runtime.sendMessage({type,...values});}catch(error){r={ok:false,error:error.message,transport:true};}if(!r)r={ok:false,error:'Bộ điều khiển chưa phản hồi.',transport:true};if(r.ok)return r.data;const transport=r.transport||/message channel closed|Could not establish connection|Receiving end does not exist|Extension context/i.test(r.error||'');if(transport&&RETRYABLE.includes(type)&&attempt<3){await sleep(1500*(attempt+1));continue;}throw Error(r.error||'Mất kết nối bộ điều khiển.');}}
 async function loaded(tabId){return waitFacebookTab(tabId,id=>chrome.tabs.get(id),sleep);}
 async function execute(j){
@@ -52,6 +76,8 @@ async function execute(j){
   }
  if(!mediaOnlyPost(j.post)){fillMissingContent(j.post);cleanCaption(j.post);fillMissingContent(j.post);}
   if(j.post.captionSuspect){await checkpoint('Đọc lại caption video');j.post=await rpc('runner-caption',auth);}
+  // 3.8.7-cap: caption rút gọn ("…") thì lấy caption đầy đủ từ bài gốc trước khi đăng, thay vì chặn bài.
+  if(j.post.captionPartial&&!/nghi-tra-loi-binh-luan/.test(j.post.captionEvidence||'')&&!mediaOnlyPost(j.post)){await checkpoint('Lấy caption đầy đủ từ bài gốc');const full=await recoverFullCaption(j);j.post=await rpc('runner-full-caption',{...auth,text:full.text,method:full.method});}
   if((j.expectedMedia&&JSON.stringify(j.expectedMedia)!==JSON.stringify(j.post.media.map(m=>m.type)))||(j.post.original?.media?.length||0)>j.post.media.length)throw Error('Media nguồn không khớp hàng chờ. Dừng trước khi mở Facebook.');
   const issue=captionIssue(j.post);if(issue)throw Error(issue);
   if(j.post.missingVideo)throw Error('Nguồn thiếu tệp video/Reels. Cập nhật link tệp trong Docs rồi tạo lượt mới.');

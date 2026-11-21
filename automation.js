@@ -236,6 +236,21 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
   if(msg.type==='bot-abort-before-click')return lock(async()=>{const d=await db(),j=job(d,msg.jobId);if(sender.tab?.id!==j.facebookTabId||msg.token!==j.token||j.state!=='verifying'||j.clickDispatchedAt||j.receiptLinks?.length)throw Error('Không thể hủy lượt đã gửi.');j.state='running';j.submittedAt=null;j.stage='blocked-before-click';j.error=String(msg.reason||'Media biến mất trước khi bấm Đăng.').slice(0,1000);await write(d);return true;});
   if(msg.type.startsWith('runner-')&&!isRunner)throw Error('Chỉ trang chạy bot được gọi thao tác này.');
   if(msg.type==='runner-claim')return lock(async()=>{const d=await db(),b=bot(d);if(!b.enabled||b.jobs.some(active))return null;if(useThreeMinuteSchedule(b))await write(d);const j=b.jobs.filter(j=>j.state==='queued'&&!(j.attempt>1&&j.lastFailure)&&runnable(b,j)&&canClaim(j,b.jobs)).sort((a,b)=>Number(b.scheduleMode==='now')-Number(a.scheduleMode==='now')||Date.parse(a.dueAt)-Date.parse(b.dueAt))[0];if(!j)return null;const {deskPersonas}=await chrome.storage.local.get('deskPersonas');const latest=d.posts.find(p=>p.id===j.postId);if(latest?.captionNameFilter?.status==='blocked'){j.stage='finished';recordOutcome(d,j,'failed',latest.captionNameFilter.message);await write(d);return null;}try{j.post.captionNameFilter=filterCaptionName(j.post,deskPersonas,d.sources,j.actor);}catch(error){j.stage='finished';recordOutcome(d,j,'failed',error.message);await write(d);return null;}j.state='running';j.stage='opening';j.startedAt=new Date().toISOString();j.heartbeatAt=j.startedAt;j.runnerTabId=sender.tab?.id;await write(d);return structuredClone(j);});
+  // 3.8.7-cap: lưu caption đầy đủ runner lấy lại cho bài "rút gọn" (media-bridge | source-page | trimmed).
+  if(msg.type==='runner-full-caption')return lock(async()=>{
+   const d=await db(),j=job(d,msg.jobId);
+   if(msg.token!==j.token||j.runnerTabId!==sender.tab?.id||j.state!=='running'||j.submittedAt)throw Error('Bot đã dừng.');
+   const text=String(msg.text||'').trim().slice(0,20000),method=['media-bridge','source-page','trimmed'].includes(msg.method)?msg.method:'trimmed';
+   if(!text)throw Error('Không lấy được caption đầy đủ và đoạn caption đang có trống.');
+   for(const target of [j.post,d.posts.find(p=>p.id===j.postId)].filter(Boolean)){
+    Object.assign(target,{text,blocks:[{runs:[{text}]}],captionPartial:false,captionEvidence:'full-caption:'+method,captionRecovered:method});
+    cleanCaption(target);fillMissingContent(target);
+   }
+   const {deskPersonas}=await chrome.storage.local.get('deskPersonas');
+   j.post.captionNameFilter=filterCaptionName(j.post,deskPersonas,d.sources,j.actor);
+   event(d,j.post,'running',method==='trimmed'?'Caption nguồn bị rút gọn, chưa lấy được bản đầy đủ: đăng đoạn đã có (bỏ dấu "…").':'Caption nguồn bị rút gọn: đã lấy caption đầy đủ từ '+(method==='media-bridge'?'Media Bridge':'bài gốc')+'.');
+   await write(d);return structuredClone(j.post);
+  });
   // 3.8.7: caption trong Docs là chữ giao diện (vd. "Facebook") ở bài Reel/video: đọc caption công khai qua Media Bridge.
   if(msg.type==='runner-caption'){
    const d0=await db(),j0=job(d0,msg.jobId);

@@ -37,7 +37,8 @@ const T=t=>({runs:[{text:t}]});
  const flagged={text:'Duy Nguyễn tks bro. Quá hữu ích',captionPartial:true,captionEvidence:'nghi-tra-loi-binh-luan',media:[{type:'image'}]};
  assert.match(captionIssue(flagged),/nghi là lời trả lời bình luận/);
  assert.equal(captionIssue({...flagged,captionPartial:false}),'');
- assert.match(captionIssue({text:'Góc sang nhượng:…',captionPartial:true,captionEvidence:'timeline',media:[{type:'image'}]}),/rút gọn/);
+ // 3.8.7-cap: caption rút gọn không còn bị chặn; runner lấy caption đầy đủ trước khi đăng (tests/full-caption-387.mjs).
+ assert.equal(captionIssue({text:'Góc sang nhượng:…',captionPartial:true,captionEvidence:'timeline',media:[{type:'image'}]}),'');
  results.push('Caption nghi là trả lời bình luận: chặn với lý do riêng; sửa caption (bỏ cờ) thì được đăng');
 }
 // Mục 5: không còn nhãn phiên bản viết cứng.
