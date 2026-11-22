@@ -122,7 +122,7 @@ clicks.slice(0,8).forEach(e=>e.click());await pause(650)}
 // (Facebook chèn ký tự ẩn U+034F), số đếm ảnh "6/29" và bình luận; bấm "Xem thêm" trước nếu có.
 const photoCaption=async()=>{const side=all('[role=complementary]').find(vis);if(!side)return null;
 for(const b of all(buttons,side).filter(e=>vis(e)&&!globalThis.researchCaption.isComment(e)&&/^(xem thêm|see more)$/i.test(txt(e))).slice(0,2)){b.click();await pause(500)}
-const blocks=all('div[dir="auto"],span[dir="auto"]',side).filter(e=>vis(e)&&!globalThis.researchCaption.isComment(e)&&!e.closest('a,time,button,[role=button],h1,h2,h3,h4,[role=heading]')&&!e.querySelector('h1,h2,h3,h4,[role=heading],button,[role=button]'));
+const blocks=all('div[dir="auto"],span[dir="auto"]',side).filter(e=>vis(e)&&!globalThis.researchCaption.isComment(e)&&!e.closest('a,time,button,[role=button],h1,h2,h3,h4,[role=heading]')&&!e.querySelector('h1,h2,h3,h4,[role=heading]')&&globalThis.researchCaption.expanderOnly(e));
 const outer=blocks.filter(e=>!blocks.some(o=>o!==e&&o.contains(e)));
 const el=outer.find(e=>{const t=txt(e);return t&&!/\u034f/.test(t)&&!/xem bài viết|^\d+\s*\/\s*\d+$|^\d{1,2} tháng \d/i.test(t)});
 return el?{text:globalThis.researchCaption.text(el),partial:/\bsee more\s*$|xem thêm\s*$/i.test(el.innerText||''),method:'photo-panel'}:null};

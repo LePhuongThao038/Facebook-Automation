@@ -81,6 +81,14 @@ Docs mẫu bị các lỗi sau: không có thụt lề, chủ trang bị gắn v
 - Trang tạo tin chỉ nhận ảnh trên máy đó thì tin video dừng với lý do rõ, chưa đăng.
 - Test: `tests/story-387.mjs` (chạy thật facebookBot trên trang tạo tin giả lập), `tests/story-automation-387.mjs`. **Trang giả lập dựng theo mô tả giao diện, chưa soi trang thật**: hãy "Chạy thử" một tin trên nick thật trước, rồi "Tải cấu trúc" gửi lại để chỉnh test nếu Facebook khác.
 
+## Post Research: nguyên nhân gốc của "caption rút gọn" (22/11, giữ số phiên bản)
+
+- Dấu hiệu: 100% bài bị chặn "caption rút gọn" đều kết thúc bằng "…". Dấu này không do code thêm vào: đó là chỗ Facebook cắt caption ở dòng thời gian ("… Xem thêm").
+- Nguyên nhân: khối caption của Facebook luôn chứa nút "Xem thêm" (thu gọn) hoặc "Ẩn bớt" (đã mở). `caption.js` (đọc dự phòng: trang video/Reel, bài không có khối message) và `scan.js` (khung bên phải trang ảnh) loại mọi khối có nút bên trong, nên loại luôn caption. Không đọc được caption ở bài gốc, Post Research dùng bản xem trước bị cắt ở dòng thời gian.
+- Sửa: chỉ loại khối có nút thật (Thích, Bình luận…); khối chỉ có nút "Xem thêm/Ẩn bớt" vẫn là caption (`researchCaption.expanderOnly`). Chữ của nút không lọt vào caption.
+- Kiểm chứng trên bài thật Docs "yến 5": bài 2 (trang ảnh) từ 49 ký tự kèm "…" thành 375 ký tự đầy đủ; bài 22 (video/Reel) từ 169 ký tự kèm "…" (code cũ không đọc được gì ở bài gốc) thành 531 ký tự đầy đủ. Test `tests/caption-expander-0226.mjs` (code cũ trượt, code mới đạt).
+- Bổ sung cho bản sửa phía FB Desk `f438ed7` (tự lấy caption đầy đủ khi đăng): nay Docs mới không còn sinh ra caption bị cắt ngay từ đầu.
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.

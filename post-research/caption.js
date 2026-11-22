@@ -2,6 +2,10 @@
 globalThis.researchCaption = (()=>{
  const normalize=s=>String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\ufeff]/g,'').replace(/\s+/g,' ').trim();
  const clean=s=>String(s||'').replace(/(?:\s|\u00a0)*(?:xem thêm|see more)\s*$/i,'').trim();
+ // 0.2.26.9: khối caption của Facebook LUÔN chứa nút "Xem thêm" (khi thu gọn) hoặc "Ẩn bớt" (khi đã mở). Bản cũ loại mọi
+ // khối có nút bên trong, nên loại luôn chính caption, rồi phải dùng bản xem trước bị cắt ở dòng thời gian (kết thúc "…").
+ // Đó là lý do mọi bài "caption rút gọn" đều có dấu "…". Nay chỉ loại khối có nút THẬT (Thích, Bình luận…); text() đã bỏ chữ của nút.
+ const expanderOnly=e=>[...e.querySelectorAll('button,[role="button"]')].every(b=>/^(?:xem thêm|see more|ẩn bớt|see less|thu gọn|show less)$/i.test(normalize(b.innerText||b.textContent)));
  const comment=e=>{for(let p=e;p;p=p.parentElement){if(p.matches?.('[data-commentid],[data-comment-id]'))return true;if(p.matches?.('article,[role="article"]')&&/^(?:bình luận(?:\s|$)|phản hồi|đáp lại|comment(?:\s|$)|reply|replied)|\s(?:đáp lại phản hồi của|replied to)\s/i.test(p.getAttribute('aria-label')||''))return true;}return false;};
  function text(element){
   if(!element)return '';const clone=element.cloneNode(true);
@@ -26,7 +30,7 @@ globalThis.researchCaption = (()=>{
   const author=[...scope.querySelectorAll('h2 a,h3 a,h4 a,[role="heading"] a')].map(e=>normalize(e.innerText));
   // 0.2.22: chữ giao diện Facebook (logo, nhãn Reel, nhãn tác giả của bình luận) không phải caption.
   const controls=/^(?:facebook|reels?|thước phim|videos?|watch|của tác giả|ảnh của tác giả|âm thanh gốc|original audio|xem thêm|see more|like|thích|comment|bình luận|share|chia sẻ|reply|phản hồi|send|gửi|follow|theo dõi|following|đang theo dõi|tác giả|author|see translation|xem bản dịch|most relevant|phù hợp nhất|all comments|tất cả bình luận|\d+(?:[.,]\d+)?\s*(?:bình luận|comments?|shares?|lượt chia sẻ|reactions?|lượt thích|giờ|phút|ngày|hours?|minutes?|days?|h|m|d)|public|công khai|friends|bạn bè)$/i;
-  const fallback=[...scope.querySelectorAll('div[dir="auto"],span[dir="auto"]')].filter(e=>visible(e)&&!blocked(e)&&!e.closest('a,time')&&!e.querySelector('h1,h2,h3,h4,[role="heading"],button,[role="button"],[contenteditable="true"]'));
+  const fallback=[...scope.querySelectorAll('div[dir="auto"],span[dir="auto"]')].filter(e=>visible(e)&&!blocked(e)&&!e.closest('a,time')&&!e.querySelector('h1,h2,h3,h4,[role="heading"],[contenteditable="true"]')&&expanderOnly(e));
   const outer=fallback.filter(e=>!fallback.some(other=>other!==e&&other.contains(e)));
   const values=outer.map(e=>({text:text(e),partial:/\bsee more\s*$|xem thêm\s*$/i.test(e.innerText||''),method:'text-block'})).filter(c=>c.text&&!controls.test(normalize(c.text))&&!author.includes(normalize(c.text)));
   // The first non-control text block precedes reactions/comments, including short captions/emoji.
@@ -41,5 +45,5 @@ globalThis.researchCaption = (()=>{
   if(y.startsWith(x)&&y.length>x.length)return {...b,fallback:true};
   return {...a,fallback:false}; // Never concatenate two differing candidates or AI-generated titles.
  }
- return {text,read,choose,normalize,clean,isComment:comment};
+ return {text,read,choose,normalize,clean,isComment:comment,expanderOnly};
 })();
