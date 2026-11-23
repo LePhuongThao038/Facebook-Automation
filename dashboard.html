@@ -40,7 +40,7 @@
 <p id="st-feedback" role="status"></p></section>
 <section class="panel"><div class="section-heading"><div><h2>Danh sách tin</h2><p class="hint">Tick các tin muốn đăng. Thứ tự đăng theo thứ tự trong danh sách (dùng ↑ ↓ để đổi).</p></div><div class="row"><button id="st-all" type="button">Chọn tất cả tin chưa đăng</button><button id="st-none" type="button">Bỏ chọn</button></div></div>
 <div class="table-wrap"><table><thead><tr><th></th><th>#</th><th>Loại</th><th>Tin</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="st-list"></tbody></table></div>
-<div class="row actions"><label>Bắt đầu lúc<input id="st-start" type="datetime-local"></label><label>Mỗi tin cách nhau (phút)<input id="st-gap" type="number" min="1" max="1440" value="3"></label></div>
+<div class="row actions"><label>Bắt đầu lúc<input id="st-start" type="datetime-local"></label><label>Mỗi tin cách nhau (phút)<input id="st-gap" type="number" min="1" max="1440" value="3"></label><label>Lệch ngẫu nhiên ± (giây)<input id="st-jitter" type="number" min="0" step="5" value="45"></label></div>
 <div class="row actions"><button id="st-schedule" class="primary" type="button">Xếp lịch các tin đã chọn</button><button id="st-now" type="button">Đăng ngay các tin đã chọn</button></div>
 <p class="hint">"Chạy thử" ở từng tin: bot làm tới trước nút "Chia sẻ lên tin" rồi bỏ bản nháp, không đăng, và lưu cấu trúc trang tạo tin để kiểm tra.</p>
 <p id="st-status" role="status"></p></section></section>

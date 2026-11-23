@@ -30,11 +30,22 @@ export function validatePlan(input,result){
  return ids.map(id=>result.items.find(i=>i.id===id));
 }
 export function directPlan(input){return input.groups.flatMap(g=>g.posts.map(p=>({id:p.id,time:p.time?parseTime(p.time).iso:'',mode:p.time?'explicit':'default'})));}
-export function assignSlots(items,existing,now=Date.now(),gap=DEFAULT_GAP_MS,startAt=0){
+// 3.8.7: LỆCH NGẪU NHIÊN THEO GIÂY. Nhịp đăng cách đúng N phút, luôn rơi vào giây :00, là dấu hiệu máy móc dễ bị
+// checkpoint. Mỗi bài theo nhịp được lệch ngẫu nhiên ±jitter (tới phần nghìn giây). Giới hạn: jitter <= gap/2 - 30 giây,
+// nên hai bài liền nhau luôn cách nhau >= 60 giây và không đảo thứ tự. Bài có giờ ghi cụ thể trong Docs giữ nguyên giờ.
+export const DEFAULT_JITTER_SECONDS=45;
+export function maxJitterSeconds(gapMs){return Math.max(0,Math.floor((gapMs/2-30000)/1000));}
+export function jitterSeconds(gapMs,seconds){const n=Number(seconds);return Number.isFinite(n)?Math.min(Math.max(0,Math.round(n)),maxJitterSeconds(gapMs)):0;}
+export function jitterOffsetMs(seconds,rand=Math.random){return seconds>0?Math.round((rand()*2-1)*seconds*1000):0;}
+export function assignSlots(items,existing,now=Date.now(),gap=DEFAULT_GAP_MS,startAt=0,jitter=0,rand=Math.random){
  // Reserve slots across all sources/batches, and enforce actual publish spacing again at runtime.
  // 3.8.7: startAt = giờ bắt đầu chọn trên đồng hồ xoay (0 = ngay bây giờ).
- let cursor=Math.max(now,Number(startAt)||0);for(const j of existing.filter(j=>!['cancelled','failed'].includes(j.state))){const t=Date.parse(j.submittedAt||j.dueAt);if(Number.isFinite(t))cursor=Math.max(cursor,t+gap);}
- return items.map(item=>{if(item.mode==='explicit'){const dueAt=parseTime(item.time).kind==='future'?parseTime(item.time).iso:new Date(now).toISOString();cursor=Math.max(cursor,Date.parse(dueAt)+gap);return {...item,minGapMs:0,dueAt};}const dueAt=new Date(cursor).toISOString();cursor+=gap;return {...item,minGapMs:gap,dueAt};});
+ const floor=Math.max(now,Number(startAt)||0),J=jitterSeconds(gap,jitter);
+ let cursor=floor;for(const j of existing.filter(j=>!['cancelled','failed'].includes(j.state))){const t=Date.parse(j.submittedAt||j.dueAt);if(Number.isFinite(t))cursor=Math.max(cursor,t+gap);}
+ // Khi có lệch ngẫu nhiên, khoảng cách tối thiểu lúc chạy hạ xuống gap - 2*jitter (>= 60 giây) để phần lệch SỚM không bị kéo về mốc cũ.
+ const minGap=J?Math.max(60000,gap-2*J*1000):gap;
+ return items.map(item=>{if(item.mode==='explicit'){const dueAt=parseTime(item.time).kind==='future'?parseTime(item.time).iso:new Date(now).toISOString();cursor=Math.max(cursor,Date.parse(dueAt)+gap);return {...item,minGapMs:0,dueAt};}
+  const at=Math.max(floor,cursor+jitterOffsetMs(J,rand));const dueAt=new Date(at).toISOString();cursor+=gap;return {...item,minGapMs:minGap,jitterSeconds:J,dueAt};});
 }
 // 3.8.7: "cách 3 phút" là khoảng cách giữa hai lần bấm Đăng. Bản cũ chỉ bắt đầu MỞ bài sau khi
 // đủ 3 phút kể từ lần bấm trước, cộng thêm thời gian chuẩn bị (~30-60 giây) và timer bị Chrome hãm,
@@ -42,7 +53,8 @@ export function assignSlots(items,existing,now=Date.now(),gap=DEFAULT_GAP_MS,sta
 // nút Đăng tới đúng mốc (submitWaitMs), nên khoảng cách tối thiểu giữa hai lần đăng vẫn giữ nguyên.
 export const CLAIM_LEAD_MS=90000;
 const lastSubmit=(j,jobs)=>Math.max(0,...jobs.filter(x=>x.id!==j.id).map(x=>Date.parse(x.submittedAt||'')||0));
-const leadFor=j=>j.scheduleMode==='default'&&(j.minGapMs??0)>=120000?CLAIM_LEAD_MS:0;
+// Lịch có lệch ngẫu nhiên hạ minGapMs (vd. 3 phút ±45 giây -> 90 giây) nhưng vẫn cần mở bài sớm để bấm đúng mốc ngẫu nhiên.
+const leadFor=j=>j.scheduleMode==='default'&&((j.minGapMs??0)>=120000||j.jitterSeconds>0)?CLAIM_LEAD_MS:0;
 export function canClaim(j,jobs,now=Date.now()){
  const gap=j.minGapMs??60000;const last=lastSubmit(j,jobs),lead=leadFor(j);return now>=Date.parse(j.dueAt)-lead&&(!last||now-last>=gap-lead);
 }

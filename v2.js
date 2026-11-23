@@ -244,7 +244,7 @@ async function enqueue(ids,minutes,resetUnsent=false){
   if(!ids.length)throw Error('Chưa xếp lịch được bài nào vì lỗi AI: '+(aiErrors[0]||'không rõ')+' Muốn đăng nguyên văn không cần AI: xóa ô Chú thích thêm của nguồn rồi bấm lại.');
   scheduleProgress('Đang xác minh nick và đọc lịch cho '+ids.length+' bài…');
   const plan=await request('bot-plan',{ids});
-  const {startAt}=dial.value();const jobs=await request('bot-enqueue',{ids,planId:plan.id,intervalMinutes:minutes,startAt:startAt?new Date(startAt).toISOString():'',resetUnsent});
+  const {startAt}=dial.value();const jobs=await request('bot-enqueue',{ids,planId:plan.id,intervalMinutes:minutes,startAt:startAt?new Date(startAt).toISOString():'',jitterSeconds:dial.value().jitterSeconds,resetUnsent});
   for(const job of jobs)cardTimes.delete(job.postId);
   await load();
   const msg='Đã xếp lịch '+jobs.length+' bài cho '+plan.actor.name+' · Bắt đầu '+(dial.value().startAt?new Date(dial.value().startAt).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'ngay')+', mỗi bài cách '+formatGap(minutes)+'.'+(skipped?' Bỏ qua '+skipped+' bài chưa đủ điều kiện.':'')+(needAI.size?' '+needAI.size+' bài chưa xếp vì lỗi AI ('+(aiErrors[0]||'')+'). Bấm Sắp lịch tự động lần nữa để xếp nốt.':'');

@@ -36,7 +36,7 @@ Write-Host "Dich : $Target  (ban $($to.version_name))"
 
 # Khong bao gio ghi de: cau hinh rieng cua may, du lieu that, ban build native host.
 $keep = @('media-bridge-config.json', 'media-native-host.json', 'media-bridge-settings.json', 'DANH-BA-TU-SHEET.json', 'VAI-VE-TU-SHEET.json')
-$skipDirs = @('.git', 'node_modules', 'tests', 'logs', 'tools', 'post-research', 'docs', 'work', 'outputs', '__pycache__')
+$skipDirs = @('.git', 'node_modules', 'tests', 'logs', 'tools', 'post-research', 'customer-profile', 'docs', 'work', 'outputs', '__pycache__')
 $files = Get-ChildItem -LiteralPath $Source -Recurse -File | Where-Object {
     $rel = $_.FullName.Substring($Source.Length).TrimStart('\')
     $top = $rel.Split('\')[0]

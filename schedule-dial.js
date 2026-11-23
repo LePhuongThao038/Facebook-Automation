@@ -15,8 +15,10 @@ export function previewTimes({startAt,minutes},count,now=Date.now()){
  const start=Math.max(now,startAt||now);return Array.from({length:Math.max(0,count)},(_,i)=>start+i*minutes*60000);
 }
 
-export function createScheduleDial(root,{minutes=3,onChange=()=>{},now=()=>Date.now()}={}){
- const state={mode:'gap',gap:Math.min(MAX_GAP,Math.max(MIN_GAP,Math.round(minutes))),offset:0,count:0};
+// 3.8.7: lệch ngẫu nhiên ±giây cho mỗi bài (tránh nhịp đăng cố định đúng N phút, giây :00). Tối đa = nửa khoảng cách − 30 giây.
+export const maxJitterFor=minutes=>Math.max(0,Math.floor(minutes*30-30));
+export function createScheduleDial(root,{minutes=3,jitterSeconds=45,onChange=()=>{},now=()=>Date.now()}={}){
+ const state={mode:'gap',gap:Math.min(MAX_GAP,Math.max(MIN_GAP,Math.round(minutes))),offset:0,count:0,jitter:Math.max(0,Math.round(jitterSeconds))};
  // offset = số phút tính từ "bây giờ" (làm tròn lên phút) tới giờ bắt đầu; 0 = ngay bây giờ.
  const base=()=>{const t=now();return Math.ceil(t/60000)*60000;};
  const startAt=()=>state.offset?base()+state.offset*60000:0;
@@ -38,7 +40,12 @@ export function createScheduleDial(root,{minutes=3,onChange=()=>{},now=()=>Date.
  const preview=document.createElement('p');preview.className='dial-preview';preview.setAttribute('role','status');preview.setAttribute('aria-live','polite');
  const reset=document.createElement('button');reset.type='button';reset.className='dial-reset';reset.textContent='Về "ngay bây giờ"';reset.addEventListener('click',()=>{state.offset=0;render();});
  const wrap=document.createElement('div');wrap.className='dial-wrap';wrap.append(face,readout);
- root.append(tabs,wrap,reset,preview);
+ const jitterRow=document.createElement('label');jitterRow.className='dial-jitter';
+ const jitterInput=document.createElement('input');jitterInput.type='number';jitterInput.min='0';jitterInput.step='5';jitterInput.value=String(state.jitter);jitterInput.setAttribute('aria-label','Lệch ngẫu nhiên mỗi bài, giây');
+ const jitterNote=document.createElement('small');
+ jitterRow.append('Lệch ngẫu nhiên mỗi bài ± ',jitterInput,' giây ',jitterNote);
+ jitterInput.addEventListener('input',()=>{state.jitter=Math.max(0,Math.round(Number(jitterInput.value)||0));render();});
+ root.append(tabs,wrap,reset,jitterRow,preview);
 
  const point=(deg,r)=>{const a=deg*Math.PI/180;return [100+r*Math.sin(a),100-r*Math.cos(a)];};
  const roll=delta=>{
@@ -66,8 +73,10 @@ export function createScheduleDial(root,{minutes=3,onChange=()=>{},now=()=>Date.
   const m=point(minuteDeg,74),h=point(hourDeg,48),k=point(minuteDeg,92);
   minuteHand.setAttribute('x2',m[0]);minuteHand.setAttribute('y2',m[1]);hourHand.setAttribute('x2',h[0]);hourHand.setAttribute('y2',h[1]);knob.setAttribute('cx',k[0]);knob.setAttribute('cy',k[1]);
   big.textContent=label;small.textContent=note;reset.hidden=state.mode!=='start'||!state.offset;
+  const J=Math.min(state.jitter,maxJitterFor(state.gap));jitterInput.max=String(maxJitterFor(state.gap));
+  jitterNote.textContent=maxJitterFor(state.gap)?(state.jitter>J?'(tối đa '+J+' giây với khoảng cách này)':'(tối đa '+maxJitterFor(state.gap)+' giây)'):'(cách 1 phút: không lệch được)';
   const times=previewTimes(value(),Math.min(state.count||3,4),now());
-  preview.textContent=(state.count?state.count+' bài · ':'')+'Bắt đầu '+(state.offset?dayLabel(times[0])+' '+clock(times[0]):'ngay')+', mỗi bài cách '+formatGap(state.gap)+' → '+times.map(clock).join(' · ')+(state.count>4?' …':'');
+  preview.textContent=(state.count?state.count+' bài · ':'')+'Bắt đầu '+(state.offset?dayLabel(times[0])+' '+clock(times[0]):'ngay')+', mỗi bài cách '+formatGap(state.gap)+' → '+times.map(clock).join(' · ')+(state.count>4?' …':'')+(J?' · mỗi bài lệch ngẫu nhiên ±'+J+' giây (không đăng đúng giây :00)':'');
   onChange(value());
  }
  // Kéo: cộng dồn góc quay, mỗi 6° = 1 phút, quay nhiều vòng được.
@@ -80,7 +89,7 @@ export function createScheduleDial(root,{minutes=3,onChange=()=>{},now=()=>Date.
  face.addEventListener('keydown',e=>{const step={ArrowUp:1,ArrowRight:1,ArrowDown:-1,ArrowLeft:-1,PageUp:10,PageDown:-10}[e.key];if(step){e.preventDefault();roll(step*(e.shiftKey?10:1));}else if(e.key==='Home'){e.preventDefault();if(state.mode==='gap')state.gap=MIN_GAP;else state.offset=0;render();}});
  // Giờ "ngay bây giờ" trôi theo thời gian thật.
  const ticker=setInterval(()=>{if(state.mode==='start'||state.count)render();},30000);
- function value(){return {minutes:state.gap,startAt:startAt()};}
+ function value(){return {minutes:state.gap,startAt:startAt(),jitterSeconds:Math.min(state.jitter,maxJitterFor(state.gap))};}
  render();
  return {
   value,

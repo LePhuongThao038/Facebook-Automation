@@ -7,7 +7,7 @@ import {resetCandidate,resetCopy,botDefaults,createJob,dueJob,canonicalPost,publ
 import {facebookBot} from './facebook-bot.js';
 import {fbUrl,docsSource,cleanCaption,fillMissingContent} from './scenario.js';
 import {createStoryJob} from './story-model.js';
-import {planningInput,needsScheduleAI,directPlan,validatePlan,assignSlots,canClaim,submitWaitMs,advanceDefaultQueue,DEFAULT_INTERVAL_MINUTES,DEFAULT_GAP_MS} from './posting-plan.js';
+import {planningInput,needsScheduleAI,directPlan,validatePlan,assignSlots,canClaim,submitWaitMs,advanceDefaultQueue,DEFAULT_INTERVAL_MINUTES,DEFAULT_GAP_MS,DEFAULT_JITTER_SECONDS,jitterSeconds,jitterOffsetMs} from './posting-plan.js';
 export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,mediaRelease,planAI,chooseAI}){
  const transfers=new Map();
  async function pause(){
@@ -147,7 +147,8 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
     const keep=b.jobs.filter(j=>!replaced.has(j.postId)||j!==replaced.get(j.postId));
     const staged=[];
     const startAt=msg.startAt?Date.parse(msg.startAt):0;if(msg.startAt&&(!Number.isFinite(startAt)||startAt>now+15*86400000))throw Error('Giờ bắt đầu trên đồng hồ không hợp lệ.');
-    for(const slot of assignSlots(plan.items,keep,now,gap,startAt)){
+    const jitter=jitterSeconds(gap,msg.jitterSeconds??DEFAULT_JITTER_SECONDS);
+    for(const slot of assignSlots(plan.items,keep,now,gap,startAt,jitter)){
      const post=posts.find(p=>p.id===slot.id);
      if(msg.resetUnsent&&!resetCandidate(post,b.jobs))throw Error('Tiến độ đã đổi. Mở lại danh sách trước khi xếp lịch.');
      const copy={...(msg.resetUnsent?resetCopy(post):post),time:slot.mode==='explicit'?slot.time:''};
@@ -158,10 +159,10 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
      staged.push(fresh);
     }
     b.jobs=[...keep,...staged];b.plan=null;
-    if(auto){b.enabled=true;b.cardsOnly=false;b.intervalMinutes=minutes;}
+    if(auto){b.enabled=true;b.cardsOnly=false;b.intervalMinutes=minutes;b.jitterSeconds=jitter;}
     for(const j of staged){
      const post=posts.find(p=>p.id===j.postId);post.state='queued';
-     event(d,j.post,'queued',(j.scheduleMode==='default'?'Cách '+minutes+' phút':'Theo kịch bản')+': '+j.dueAt);
+     event(d,j.post,'queued',(j.scheduleMode==='default'?'Cách '+minutes+' phút'+(jitter?' ±'+jitter+' giây ngẫu nhiên':''):'Theo kịch bản')+': '+j.dueAt);
     }
     await write(d);return staged.map(publicJob);
    });
@@ -204,8 +205,10 @@ export function createAutomation({db,write,lock,event,mediaFile,mediaChunk,media
     const minutes=Number(msg.intervalMinutes??3);if(!Number.isSafeInteger(minutes)||minutes<1||minutes>1440)throw Error('Khoảng cách giữa các tin phải từ 1 đến 1440 phút.');
     const now=Date.now();let start=now;
     if(mode==='schedule'){start=Date.parse(msg.startAt);if(!Number.isFinite(start)||start<now-60000||start>now+15*86400000)throw Error('Giờ bắt đầu không hợp lệ (trong vòng 15 ngày tới).');start=Math.max(start,now);}
+    // 3.8.7: mỗi tin lệch ngẫu nhiên ±giây như bài viết; tin đầu không sớm hơn giờ bắt đầu.
+    const jitter=mode==='dry'?0:jitterSeconds(minutes*60000,msg.jitterSeconds??DEFAULT_JITTER_SECONDS);
     const staged=[];
-    stories.forEach((s,i)=>staged.push(createStoryJob(s,actor,[...b.jobs,...staged],{dueAt:start+i*minutes*60000,scheduleMode:mode==='schedule'?'manual':'now',minGapMs:mode==='schedule'?0:60000,dryRun:mode==='dry'},now)));
+    stories.forEach((s,i)=>staged.push(createStoryJob(s,actor,[...b.jobs,...staged],{dueAt:Math.max(start,start+i*minutes*60000+jitterOffsetMs(jitter)),scheduleMode:mode==='schedule'?'manual':'now',minGapMs:mode==='schedule'?0:60000,dryRun:mode==='dry'},now)));
     b.jobs.push(...staged);
     if(!b.enabled){b.cardsOnly=true;for(const other of b.jobs)if(!staged.includes(other))other.cardScheduled=false;}
     b.enabled=true;b.actor=actor;b.plan=null;

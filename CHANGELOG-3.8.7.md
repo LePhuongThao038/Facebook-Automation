@@ -89,6 +89,14 @@ Docs mẫu bị các lỗi sau: không có thụt lề, chủ trang bị gắn v
 - Kiểm chứng trên bài thật Docs "yến 5": bài 2 (trang ảnh) từ 49 ký tự kèm "…" thành 375 ký tự đầy đủ; bài 22 (video/Reel) từ 169 ký tự kèm "…" (code cũ không đọc được gì ở bài gốc) thành 531 ký tự đầy đủ. Test `tests/caption-expander-0226.mjs` (code cũ trượt, code mới đạt).
 - Bổ sung cho bản sửa phía FB Desk `f438ed7` (tự lấy caption đầy đủ khi đăng): nay Docs mới không còn sinh ra caption bị cắt ngay từ đầu.
 
+## Lệch ngẫu nhiên theo giây khi xếp lịch (23/11, không đổi số phiên bản)
+
+- Lý do: nhịp đăng cách đúng N phút, luôn rơi vào giây :00, là dấu hiệu máy móc, có rủi ro bị checkpoint.
+- Mỗi bài theo nhịp (đồng hồ xoay) và mỗi tin Story được lệch ngẫu nhiên ± N giây (mặc định ±45, tới phần nghìn giây). Ô "Lệch ngẫu nhiên mỗi bài ± giây" nằm dưới đồng hồ xoay và ở tab Đăng Story.
+- Giới hạn an toàn: lệch tối đa = nửa khoảng cách − 30 giây (cách 3 phút: ±60 giây; cách 1 phút: không lệch), nên hai bài liền nhau luôn cách ≥ 60 giây và không đảo thứ tự; bài đầu không sớm hơn giờ bắt đầu.
+- Lúc chạy: khoảng cách tối thiểu hạ còn khoảng cách − 2×lệch để phần lệch SỚM không bị kéo về đúng N phút; vẫn mở bài sớm để chuẩn bị và chỉ bấm Đăng đúng mốc ngẫu nhiên.
+- Bài có giờ cụ thể trong Docs giữ đúng giờ; lệch = 0 giữ nhịp cũ. Test: `tests/jitter-387.mjs`.
+
 ## Nguyên tắc an toàn giữ nguyên
 
 - Không bao giờ bấm Đăng lần hai. "Đã đăng" chỉ được ghi sau khi đã bấm Đăng **và** Facebook đóng hộp soạn mà không báo lỗi.
