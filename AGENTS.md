@@ -82,9 +82,10 @@ Vùng riêng: tab **04 Đăng Story** (`story-ui.js`), dữ liệu `d.stories`, 
 
 ## Hồ sơ khách hàng (extension riêng `customer-profile/`, 0.1.0, 23/11)
 
-Dựng hồ sơ **nhân khẩu + 7 trục tính cách/mua hàng** từ trang cá nhân **công khai** của khách đã liên hệ. Chỉ đọc, không tương tác. Không phụ thuộc FB Desk hay Post Research. Chi tiết, định nghĩa trục và cách dùng: [customer-profile/README.md](customer-profile/README.md).
+**Persona = Radar Nhân khẩu + Radar Tính cách (extension này) + Radar 8 trục mua hàng (agent khác).** Chỉ đọc trang cá nhân công khai của khách đã liên hệ; không phụ thuộc FB Desk hay Post Research. Chi tiết: [customer-profile/README.md](customer-profile/README.md).
 
-**Trục 8 "Đã bị đối thủ tiếp cận" (`competitor_exposure`) do agent khác làm.** Đã có chỗ trống trên biểu đồ; nạp kết quả theo định dạng `desk.customer-axis/1` (đặc tả trong README, hàm `customerModel.mergeExternal`). Không đưa danh tính các tài khoản bán hàng khác vào kết quả. Không sửa 7 trục còn lại khi làm trục 8.
+- **Mốc chuẩn khái niệm:** [customer-profile/KHAI-NIEM.md](customer-profile/KHAI-NIEM.md) (sinh từ `concepts.js`). Đọc trước khi phân loại hoặc sửa trục. Sửa định nghĩa ở `concepts.js`, rồi chạy `node customer-profile/build-glossary.mjs`.
+- **Agent làm 8 trục mua hàng:** không sửa radar nhân khẩu/tính cách; xuất kết quả theo định dạng `desk.customer-buying/1` (đặc tả trong README) để nạp vào. Không đưa danh tính các tài khoản bán hàng khác vào kết quả.
 
 ## Quy tắc khi sửa và đẩy mã
 

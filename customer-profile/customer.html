@@ -8,8 +8,8 @@
 </head>
 <body>
 <header class="top">
- <div><small>HỒ SƠ KHÁCH HÀNG</small><h1>Bản đồ nhân khẩu &amp; tính cách</h1>
- <p>Chỉ dùng cho khách <b>đã liên hệ</b> bạn. Chỉ đọc thông tin <b>công khai</b>, không bấm thích, theo dõi, nhắn tin hay bình luận.</p></div>
+ <div><small>HỒ SƠ KHÁCH HÀNG</small><h1>Persona: nhân khẩu · tính cách · mua hàng</h1>
+ <p>Chỉ dùng cho khách <b>đã liên hệ</b> bạn. Chỉ đọc thông tin <b>công khai</b>, không bấm thích, theo dõi, nhắn tin hay bình luận. Bấm <span class="q static">?</span> để xem định nghĩa (đầy đủ trong KHAI-NIEM.md).</p></div>
 </header>
 <div class="layout">
  <aside class="saved">
@@ -17,31 +17,35 @@
   <input id="search" type="search" placeholder="Tìm theo tên…" aria-label="Tìm hồ sơ">
   <ul id="savedList"></ul>
   <button id="exportAll" type="button">Xuất tất cả (JSON)</button>
+  <h2 class="gap">Khái niệm chung</h2>
+  <ul id="general" class="general"></ul>
  </aside>
  <main>
   <section class="card">
    <label for="url">Link trang cá nhân của khách</label>
    <div class="row"><input id="url" type="url" placeholder="https://www.facebook.com/…"><button id="analyze" class="primary" type="button">Phân tích</button></div>
-   <label for="product">Từ khóa sản phẩm/dịch vụ của bạn (giúp chấm "Mức cần gấp"; cách nhau dấu phẩy)</label>
-   <input id="product" type="text" placeholder="vd: tiếng anh, toeic, ielts">
    <p id="status" role="status"></p>
   </section>
-  <section id="result" class="card" hidden>
-   <div class="who"><div><h2 id="name"></h2><a id="link" target="_blank" rel="noopener noreferrer"></a><p id="meta" class="muted"></p></div>
-    <div class="actions"><button id="save" class="primary" type="button">Lưu hồ sơ</button><button id="exportOne" type="button">Xuất JSON</button><label class="file">Nạp trục 8 (JSON)<input id="importAxis" type="file" accept="application/json"></label><button id="remove" type="button">Xóa hồ sơ</button></div></div>
-   <h3>Nhân khẩu <span class="muted">(chỉ thông tin công khai; mỗi mục ghi nguồn)</span></h3>
-   <div id="demo" class="chips"></div>
-   <div class="radarWrap">
-    <canvas id="radar" width="480" height="480" aria-label="Biểu đồ mạng nhện tính cách và mua hàng"></canvas>
-    <div class="sliders"><h3>Chỉ số <span class="muted">(kéo để chỉnh tay; ↺ về điểm tự động)</span></h3><div id="sliders"></div></div>
+  <section id="result" hidden>
+   <div class="card">
+    <div class="who"><div><h2 id="name"></h2><a id="link" target="_blank" rel="noopener noreferrer"></a><p id="meta" class="muted"></p></div>
+     <div class="actions"><button id="save" class="primary" type="button">Lưu hồ sơ</button><button id="exportOne" type="button">Xuất JSON</button><label class="file">Nạp 8 trục mua hàng (JSON)<input id="importBuying" type="file" accept="application/json"></label><button id="remove" type="button">Xóa hồ sơ</button></div></div>
+    <h3>Persona <button class="q" data-term="Persona" type="button" aria-label="Persona là gì">?</button></h3>
+    <div id="persona" class="persona"></div>
+    <h3>Thông tin công khai</h3>
+    <div id="facts" class="chips"></div>
    </div>
-   <h3>Định nghĩa và bằng chứng từng trục</h3>
-   <div id="axes"></div>
-   <h3>Ghi chú của người tư vấn</h3>
-   <textarea id="notes" rows="3" placeholder="vd: đã hỏi giá khóa TOEIC, hẹn gọi lại thứ 6"></textarea>
+   <div class="radars">
+    <section class="card radarCard"><h3>1. Nhân khẩu</h3><canvas id="radarDemo" width="420" height="420" aria-label="Radar nhân khẩu"></canvas><div id="slidersDemo"></div></section>
+    <section class="card radarCard"><h3>2. Tính cách</h3><canvas id="radarTrait" width="420" height="420" aria-label="Radar tính cách"></canvas><div id="slidersTrait"></div></section>
+    <section class="card radarCard"><h3>3. Mua hàng <span class="muted">(agent khác)</span></h3><canvas id="radarBuy" width="420" height="420" aria-label="Radar mua hàng"></canvas><div id="buyBox"></div></section>
+   </div>
+   <div class="card"><h3>Ghi chú của người tư vấn</h3><textarea id="notes" rows="3" placeholder="vd: đã hỏi giá khóa TOEIC, hẹn gọi lại thứ 6"></textarea></div>
   </section>
  </main>
 </div>
+<dialog id="tip"><h3 id="tipTitle"></h3><div id="tipBody"></div><form method="dialog"><button>Đóng</button></form></dialog>
+<script src="concepts.js"></script>
 <script src="customer-model.js"></script>
 <script src="reader.js"></script>
 <script src="customer.js"></script>

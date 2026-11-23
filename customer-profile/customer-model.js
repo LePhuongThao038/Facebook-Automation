@@ -1,142 +1,182 @@
-// Hồ sơ khách hàng (Post Research): chấm NHÂN KHẨU + 7 TRỤC tính cách/mua hàng từ trang cá nhân công khai của khách đã liên hệ.
-// Trục 8 "Đã bị đối thủ tiếp cận" do agent khác làm: chỉ khai báo chỗ trống (EXTERNAL_AXES) và cách nạp (mergeExternal).
-// Nguyên tắc: chỉ dùng thông tin công khai; mỗi điểm có bằng chứng; thiếu dữ liệu thì để null ("chưa đủ dữ liệu"), không gán đại;
-// không suy đoán và không dùng làm bằng chứng các chủ đề nhạy cảm (sức khỏe, tôn giáo, chính trị, xu hướng tính dục).
+// Hồ sơ khách hàng -> PERSONA = Nhân khẩu + Tính cách (phần này) + 8 trục mua hàng (agent khác làm, nạp vào bằng JSON).
+//  1. Radar NHÂN KHẨU: thang đo có định nghĩa, khớp nhóm Tuổi / Thu nhập / Đẳng cấp của Sheet "Nhân cách".
+//  2. Radar TÍNH CÁCH: nét thể hiện qua bài viết, gồm 4 nét của Sheet: Ngây thơ, Hiểu biết, Cá tính mạnh, Ngốc/Ngã cây.
+//  3. Radar MUA HÀNG: KHÔNG chấm ở đây; nạp kết quả 8 trục của agent khác (mergeBuying, định dạng desk.customer-buying/1).
+// Nguyên tắc: chỉ thông tin công khai của khách đã liên hệ; mỗi điểm có bằng chứng; thiếu dữ liệu -> null, không gán đại;
+// không dùng làm bằng chứng các chủ đề nhạy cảm (sức khỏe, tôn giáo, chính trị, xu hướng tính dục).
 globalThis.customerModel=(()=>{
- const SCHEMA='desk.customer-profile/1';
+ const SCHEMA='desk.customer-profile/2',BUYING_SCHEMA='desk.customer-buying/1';
  const fold=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase().replace(/\s+/g,' ').trim();
- // Từ khóa so khớp theo ranh giới từ. GIỮ DẤU khi bài viết có dấu: bỏ dấu làm từ khác nghĩa trùng nhau
- // ("lừa đảo" thành "lua dao" chứa "dao" = "đạo"; "đang" thành "dang" = "đảng"). Chỉ khi người viết gõ không dấu mới so bản bỏ dấu.
+ // So khớp GIỮ DẤU khi bài có dấu ("đang" ≠ "đảng", "lừa đảo" không chứa "đạo"); chỉ so bản bỏ dấu khi người viết gõ không dấu.
  const lower=s=>String(s||'').normalize('NFC').toLocaleLowerCase('vi').replace(/\s+/g,' ').trim();
  const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
  const bound=w=>new RegExp('(^|[^\\p{L}\\p{N}])'+esc(w)+'(?=$|[^\\p{L}\\p{N}])','u');
  const words=list=>list.map(x=>Array.isArray(x)?x:[x,1]).map(([w,k])=>({w,re:bound(lower(w)),reFold:bound(fold(w)),k}));
  const hasMarks=t=>/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(t);
  const match=(x,t)=>hasMarks(t)?x.re.test(lower(t)):x.reFold.test(fold(t));
- const SENSITIVE=words(['bệnh','ung thư','điều trị','bệnh viện','mang thai','có bầu','sảy thai','trầm cảm','thuốc','phật giáo','công giáo','tin lành','nhà thờ','đi chùa','cầu nguyện','đạo','đảng','chính phủ','biểu tình','bầu cử','chính trị','lgbt','đồng tính','gay','les','chuyển giới']);
- const AXES=[
-  {id:'need_urgency',label:'Mức cần gấp',
-   definition:'Khách đang chủ động tìm, hỏi hoặc so sánh một sản phẩm/dịch vụ trong thời gian gần đây.',
-   low:'Không thấy dấu hiệu đang tìm mua gì.',high:'Vừa đăng hỏi, xin gợi ý hoặc nói cần gấp, nhất là đúng lĩnh vực của bạn.',
-   cues:words([['cần tìm',2],['đang tìm',2],['ai biết',1.5],['ai có',1],['xin review',2],['xin tư vấn',2],['tư vấn giúp',2],['giới thiệu giúp',2],['recommend',1.5],['muốn mua',2],['định mua',2],['mua ở đâu',2],['ở đâu',1],['cần gấp',3],['gấp',1],['có ai',1],['help',1],['cứu',1],['nên mua',1.5],['nên chọn',1.5]])},
-  {id:'spending_power',label:'Khả năng chi trả',
-   definition:'Dấu hiệu công khai về mức chi tiêu: công việc, chỗ ở, du lịch, đồ dùng.',
-   low:'Đang tìm việc, than hết tiền, sinh viên chưa đi làm.',high:'Chức vụ quản lý/chủ doanh nghiệp, du lịch nước ngoài thường xuyên, đồ dùng cao cấp.',
-   cues:words([['du lịch',1],['resort',1.5],['khách sạn',1],['bay',0.5],['nhật bản',1],['hàn quốc',1],['singapore',1],['châu âu',1.5],['paris',1.5],['dubai',1.5],['iphone',0.5],['macbook',1],['mercedes',2],['bmw',2],['lexus',2],['porsche',2.5],['louis vuitton',2],['gucci',2],['chanel',2],['hermes',2.5],['rolex',2.5],['biệt thự',2],['penthouse',2],['golf',2],['vinhomes',1],['giám đốc',2],['ceo',2],['founder',2],['chủ doanh nghiệp',2],['trưởng phòng',1.5],['manager',1],['bác sĩ',1],['luật sư',1]]),
-   anti:words([['thất nghiệp',2],['tìm việc',1.5],['xin việc',1.5],['hết tiền',2],['cháy túi',2],['nợ',1],['vay',1],['thiếu tiền',2],['nghèo',1.5]])},
-  {id:'price_sensitivity',label:'Nhạy cảm giá',
-   definition:'Mức khách quan tâm tới giá, khuyến mãi và so giá trước khi mua.',
-   low:'Không nhắc giá; ưu tiên chất lượng, thương hiệu.',high:'Hay săn sale, mã giảm giá, hỏi giá, so giá giữa nhiều nơi.',
-   cues:words([['sale',1.5],['săn sale',2],['giảm giá',2],['voucher',2],['mã giảm',2],['freeship',2],['flash sale',2],['khuyến mãi',1.5],['rẻ',1.5],['giá rẻ',2],['bao nhiêu',1],['giá',0.7],['so giá',2],['đắt',1.5],['hời',1.5],['tiết kiệm',1],['thanh lý',1.5],['pass lại',1.5]])},
-  {id:'skepticism',label:'Mức hoài nghi',
-   definition:'Mức khách cần bằng chứng, review thật và hay cảnh giác trước khi tin người bán.',
-   low:'Dễ tin, mua theo cảm hứng, không nhắc review.',high:'Từng than bị lừa, bóc phốt, đòi review thật, cảnh giác hàng giả.',
-   cues:words([['lừa',2],['lừa đảo',2.5],['scam',2.5],['bóc phốt',2.5],['phốt',2],['cảnh giác',2],['review thật',2],['uy tín',1],['hàng giả',2],['fake',1.5],['thất vọng',1.5],['không như quảng cáo',2.5],['kém chất lượng',2],['đừng mua',2],['tránh xa',2],['chất lượng kém',2]])},
-  {id:'depth_need',label:'Cần tư vấn sâu',
-   definition:'Mức khách muốn hiểu kỹ: hỏi chi tiết, đọc và viết dài, quan tâm chuyên môn.',
-   low:'Bài ngắn, ít hỏi; cần câu trả lời gọn.',high:'Viết dài, hỏi "tại sao/so sánh", chia sẻ kinh nghiệm, trình độ học vấn cao.',
-   cues:words([['tại sao',1.5],['vì sao',1.5],['so sánh',2],['kinh nghiệm',1.5],['phân tích',2],['chi tiết',1],['cách nào',1],['ưu nhược',2],['thông số',2],['nghiên cứu',1.5],['tìm hiểu',1.5]])},
-  {id:'influence',label:'Mức ảnh hưởng',
-   definition:'Số người theo dõi và mức tương tác trên bài của khách.',
-   low:'Dưới vài trăm người theo dõi, bài ít tương tác.',high:'Hàng chục nghìn người theo dõi trở lên, bài có nhiều cảm xúc và bình luận.'},
-  {id:'activity',label:'Độ hoạt động',
-   definition:'Khách đăng bài gần đây và đều đặn đến mức nào (khả năng thấy và trả lời tin nhắn).',
-   low:'Bài gần nhất đã lâu (vài tháng trở lên).',high:'Đăng nhiều bài trong 30 ngày qua, bài gần nhất trong vài ngày.'}
- ];
- // Trục do agent khác cung cấp. Chỉ hiển thị khi đã nạp dữ liệu hợp lệ (mergeExternal).
- const EXTERNAL_AXES=[{id:'competitor_exposure',label:'Đã bị đối thủ tiếp cận',owner:'agent khác (trục 8)',
-  definition:'Mức khách đã bị các bên bán hàng khác tiếp cận trên bài công khai (đếm và phân loại bình luận chào hàng; không lưu danh tính các tài khoản đó).'}];
- const clamp=v=>Math.max(0,Math.min(100,Math.round(v)));
- const sensitive=t=>SENSITIVE.some(x=>match(x,t));
  const hits=(t,list)=>(list||[]).filter(x=>match(x,t));
+ const SENSITIVE=words(['bệnh','ung thư','điều trị','bệnh viện','mang thai','có bầu','sảy thai','trầm cảm','thuốc','phật giáo','công giáo','tin lành','nhà thờ','đi chùa','cầu nguyện','đạo','đảng','chính phủ','biểu tình','bầu cử','chính trị','lgbt','đồng tính','chuyển giới']);
+ const sensitive=t=>SENSITIVE.some(x=>match(x,t));
+ const clamp=v=>Math.max(0,Math.min(100,Math.round(v)));
  const snippet=(t,max=140)=>{const s=String(t||'').replace(/\s+/g,' ').trim();return s.length>max?s.slice(0,max-1)+'…':s;};
- // "1,2K" "87K" "3,4 triệu" "1.234" -> số
- function count(v){const s=fold(v).trim();const m=s.match(/^(\d+(?:[.,]\d+)?)\s*(nghin|trieu|k|n|tr|m)?(?![a-z])/);if(!m)return null;let n=m[2]?parseFloat(m[1].replace(',','.')):parseFloat(m[1].replace(/[.,]/g,''));if(!Number.isFinite(n))return null;if(/^(k|n|nghin)$/.test(m[2]||''))n*=1e3;if(/^(tr|trieu|m)$/.test(m[2]||''))n*=1e6;return Math.round(n);}
- const confidence=n=>n>=4?'cao':n>=2?'trung bình':n>=1?'thấp':'không có';
- // Điểm từ bằng chứng từ khóa: tổng trọng số có giảm dần theo độ cũ, đổi sang 0..100 bằng hàm bão hòa.
  const saturate=(x,half)=>100*(1-Math.exp(-x/half));
- const recencyWeight=d=>d==null?0.6:d<=30?1:d<=90?0.7:d<=365?0.4:0.2;
- function keywordAxis(axis,posts,extraCues=[],aboutText=''){
-  const ev=[];let pos=0,neg=0;
-  const cues=[...(axis.cues||[]),...extraCues];
-  posts.forEach((p,i)=>{if(sensitive(p.text))return;const h=hits(p.text,cues),a=hits(p.text,axis.anti);const w=recencyWeight(p.ageDays);
-   if(h.length){const s=h.reduce((t,x)=>t+x.k,0)*w;pos+=s;ev.push({post:i,text:snippet(p.text),why:'có: '+h.map(x=>x.w).join(', '),weight:+s.toFixed(2)});}
-   if(a.length){const s=a.reduce((t,x)=>t+x.k,0)*w;neg+=s;ev.push({post:i,text:snippet(p.text),why:'ngược: '+a.map(x=>x.w).join(', '),weight:-(+s.toFixed(2))});}});
-  if(aboutText){const h=hits(aboutText,cues),a=hits(aboutText,axis.anti);if(h.length){const s=h.reduce((t,x)=>t+x.k,0);pos+=s;ev.push({post:-1,text:snippet(aboutText),why:'Giới thiệu có: '+h.map(x=>x.w).join(', '),weight:s});}if(a.length){const s=a.reduce((t,x)=>t+x.k,0);neg+=s;ev.push({post:-1,text:snippet(aboutText),why:'Giới thiệu ngược: '+a.map(x=>x.w).join(', '),weight:-s});}}
-  ev.sort((x,y)=>Math.abs(y.weight)-Math.abs(x.weight));
-  return {pos,neg,evidence:ev.slice(0,5),n:ev.length};
+ const recencyWeight=d=>d==null?0.6:d<=30?1:d<=90?0.8:d<=365?0.5:0.3;
+ function count(v){const s=fold(v).trim();const m=s.match(/^(\d+(?:[.,]\d+)?)\s*(nghin|trieu|k|n|tr|m)?(?![a-z])/);if(!m)return null;let n=m[2]?parseFloat(m[1].replace(',','.')):parseFloat(m[1].replace(/[.,]/g,''));if(!Number.isFinite(n))return null;if(/^(k|n|nghin)$/.test(m[2]||''))n*=1e3;if(/^(tr|trieu|m)$/.test(m[2]||''))n*=1e6;return Math.round(n);}
+
+ // ===================== 1. RADAR NHÂN KHẨU =====================
+ // Mỗi trục là MỘT THANG ĐO; bands là các mốc định nghĩa (khớp nhóm của Sheet khi có cột "sheet").
+ const DEMO_AXES=[
+  {id:'age',label:'Tuổi',sheet:'Tuổi',definition:'Tuổi của khách quy ra thang 0–100 (15 tuổi = 0, 65 tuổi = 100).',
+   bands:[[0,14,'Sinh viên','≤ 22 tuổi'],[15,40,'Đi làm','23–35 tuổi'],[41,80,'Trung niên','36–55 tuổi'],[81,100,'Lớn tuổi','> 55 tuổi']]},
+  {id:'income',label:'Thu nhập',sheet:'Thu nhập',definition:'Mức thu nhập suy từ công việc công khai và tình trạng việc làm.',
+   bands:[[0,30,'Xin việc','chưa có/đang tìm việc, sinh viên'],[31,70,'Dân VP','nhân viên, chuyên viên, giáo viên, kỹ sư'],[71,100,'Thu nhập cao','quản lý, chủ doanh nghiệp, nghề chuyên môn cao']]},
+  {id:'class',label:'Đẳng cấp',sheet:'Đẳng cấp',definition:'Tầng lớp theo lối sống công khai: công việc tay chân, sinh hoạt phổ thông, hay du lịch nước ngoài/đồ hiệu/nhà xe cao cấp.',
+   bands:[[0,35,'Lao động','công việc tay chân, ca kíp'],[36,70,'Bình thường','sinh hoạt phổ thông'],[71,100,'VIP','du lịch nước ngoài, đồ hiệu, nhà/xe cao cấp']]},
+  {id:'education',label:'Học vấn',definition:'Bậc học cao nhất công khai trên trang Giới thiệu.',
+   bands:[[0,35,'Phổ thông','THCS/THPT'],[36,55,'Cao đẳng/Trung cấp',''],[56,80,'Đại học',''],[81,100,'Sau đại học','Thạc sĩ, Tiến sĩ']]},
+  {id:'urban',label:'Đô thị',definition:'Mức đô thị của nơi đang sống (hoặc quê quán nếu không ghi nơi sống).',
+   bands:[[0,35,'Nông thôn',''],[36,60,'Tỉnh/thị xã',''],[61,85,'Thành phố lớn','Đà Nẵng, Hải Phòng, Cần Thơ…'],[86,100,'Hà Nội/TP.HCM/nước ngoài','']]},
+  {id:'family',label:'Giai đoạn gia đình',definition:'Giai đoạn gia đình theo tình trạng quan hệ công khai và bài viết về con cái.',
+   bands:[[0,25,'Độc thân',''],[26,55,'Hẹn hò/Đính hôn',''],[56,80,'Đã kết hôn',''],[81,100,'Có con','']]}
+ ];
+ const BIG_CITY=words(['hà nội','hanoi','hồ chí minh','ho chi minh','sài gòn','saigon','tp.hcm','tphcm','hcm']);
+ const CITY=words(['đà nẵng','hải phòng','cần thơ','nha trang','huế','vũng tàu','biên hòa','thủ đức']);
+ const ABROAD=words(['korea','hàn quốc','seoul','nhật bản','japan','tokyo','osaka','singapore','úc','australia','sydney','melbourne','mỹ','usa','california','canada','đức','germany','pháp','paris','london','đài loan','taiwan']);
+ const RURAL=words(['xã','thôn','huyện','làng','ấp']);
+ const HIGH_JOB=words(['giám đốc','ceo','founder','co-founder','chủ tịch','chủ doanh nghiệp','owner','trưởng phòng','trưởng nhóm','manager','director','head of','bác sĩ','luật sư','kiến trúc sư','phó giám đốc']);
+ const OFFICE_JOB=words(['nhân viên','chuyên viên','kế toán','giáo viên','giảng viên','kỹ sư','engineer','developer','marketing','sale','sales','thiết kế','designer','biên dịch','phiên dịch','điều dưỡng','dược sĩ','ngân hàng','trợ lý','assistant','executive','teacher','lập trình','trưởng ban']);
+ const LABOR=words(['công nhân','phụ hồ','thợ','shipper','giao hàng','tài xế','xe ôm','bán hàng rong','làm thuê','tăng ca','ca đêm','bốc vác','may mặc','phụ bếp','bồi bàn']);
+ const NO_JOB=words(['thất nghiệp','tìm việc','xin việc','cần việc']);
+ const LUX=words([['du lịch',1],['resort',1.5],['nhật bản',1],['hàn quốc',1],['singapore',1],['châu âu',1.5],['paris',1.5],['dubai',1.5],['macbook',1],['mercedes',2],['bmw',2],['lexus',2],['porsche',2.5],['louis vuitton',2],['gucci',2],['chanel',2],['hermes',2.5],['rolex',2.5],['biệt thự',2],['penthouse',2],['golf',2],['fine dining',2],['business class',2.5]]);
+ const KID=words(['con mình','con trai mình','con gái mình','bé nhà','con nhà mình','mẹ bỉm','bố bỉm','sinh nhật con','con yêu','hai con','đón con','đưa con']);
+ const secsOf=about=>(about||[]).flatMap(t=>(t.sections||[]).map(s=>({tab:t.tab,...s})));
+ function demographicAxes(input,now){
+  const secs=secsOf(input.about),pick=re=>secs.find(s=>re.test(fold(s.title)));
+  const posts=(input.posts||[]).filter(p=>p&&p.text&&!sensitive(p.text));
+  const src=s=>'Giới thiệu › '+(s?.tab||'')+' › '+(s?.title||'');
+  const out={};const set=(id,score,confidence,evidence,note='')=>{out[id]={score:score==null?null:clamp(score),confidence:score==null?'không có':confidence,evidence,note:score==null?(note||'Trang không công khai thông tin này.'):note};};
+  {const b=pick(/^(ngay sinh|sinh nhat|birthday|nam sinh|birth year)$/);const y=b&&Number((b.values.join(' ').match(/(19|20)\d{2}/)||[])[0]);
+   const hs=secs.find(s=>/trung hoc|high school/.test(fold(s.title))&&/tot nghiep nam (\d{4})|class of (\d{4})/.test(fold(s.values.join(' '))));
+   const hy=hs&&Number((fold(hs.values.join(' ')).match(/tot nghiep nam (\d{4})|class of (\d{4})/)||[]).slice(1).find(Boolean));
+   const studying=secs.find(s=>/dai hoc|university|cao dang/.test(fold(s.title))&&/(dang hoc|studies at)/.test(fold(s.values.join(' '))));
+   const toScore=a=>(a-15)/50*100;
+   if(y)set('age',toScore(now.getFullYear()-y),'cao',[{text:(now.getFullYear()-y)+' tuổi (sinh năm '+y+')',why:src(b)}]);
+   else if(hy)set('age',toScore(now.getFullYear()-hy+18),'trung bình',[{text:'khoảng '+(now.getFullYear()-hy+18)+' tuổi (tốt nghiệp THPT '+hy+')',why:src(hs)}],'Ước tính từ năm tốt nghiệp THPT.');
+   else if(studying)set('age',toScore(20),'thấp',[{text:'Đang học đại học/cao đẳng',why:src(studying)}],'Ước tính từ việc đang đi học.');
+   else set('age',null);}
+  {const w=pick(/^(cong viec|work|noi lam viec)$/);const wt=w?w.values.join(' · '):'';const current=w&&!/^(tung lam|da lam|former|previously)/.test(fold(w.values[0]||''));
+   const ev=[];let score=null,conf='thấp';
+   if(w&&hits(wt,HIGH_JOB).length){score=current?85:65;conf=current?'trung bình':'thấp';ev.push({text:snippet(wt),why:src(w)+(current?'':' (công việc cũ)')});}
+   else if(w&&hits(wt,OFFICE_JOB).length){score=current?50:42;conf=current?'trung bình':'thấp';ev.push({text:snippet(wt),why:src(w)+(current?'':' (công việc cũ)')});}
+   else if(w&&hits(wt,LABOR).length){score=25;conf='trung bình';ev.push({text:snippet(wt),why:src(w)});}
+   const nojob=posts.filter(p=>hits(p.text,NO_JOB).length&&(p.ageDays==null||p.ageDays<=180));
+   if(nojob.length&&(score==null||!current)){score=15;conf=nojob.length>1?'trung bình':'thấp';ev.unshift({text:snippet(nojob[0].text),why:'bài gần đây: '+hits(nojob[0].text,NO_JOB).map(x=>x.w).join(', ')});}
+   if(score==null&&w){score=45;conf='thấp';ev.push({text:snippet(wt),why:src(w)+' (không rõ loại công việc)'});}
+   set('income',score,conf,ev,score==null?'Trang không công khai công việc.':'');}
+  {let pos=0,lab=0;const ev=[];
+   for(const p of posts){const w=recencyWeight(p.ageDays),h=hits(p.text,LUX),l=hits(p.text,LABOR);if(h.length){const s=h.reduce((a,x)=>a+x.k,0)*w;pos+=s;ev.push({text:snippet(p.text),why:'lối sống: '+h.map(x=>x.w).join(', '),weight:s});}if(l.length){const s=l.length*1.5*w;lab+=s;ev.push({text:snippet(p.text),why:'lao động: '+l.map(x=>x.w).join(', '),weight:-s});}}
+   const job=out.income?.score;
+   if(!ev.length&&job==null&&posts.length<5)set('class',null,'',[],'Chưa đủ bài viết công khai để đánh giá lối sống.');
+   else{let score=50+saturate(pos,4)*0.45-saturate(lab,3)*0.4;if(job!=null)score=score*0.7+job*0.3;ev.sort((a,b)=>Math.abs(b.weight)-Math.abs(a.weight));
+    set('class',score,ev.length>=3?'trung bình':'thấp',ev.slice(0,4).map(({text,why})=>({text,why})),ev.length?'':'Không thấy dấu hiệu lối sống đặc biệt trong '+posts.length+' bài; xếp mức phổ thông.');}}
+  {const all=secs.filter(s=>/dai hoc|cao hoc|university|college|truong|trung hoc|high school|hoc van|education/.test(fold(s.title)));const t=fold(all.map(s=>s.title+' '+s.values.join(' ')).join(' | '));
+   const level=/thac si|tien si|cao hoc|master|phd|mba/.test(t)?90:/dai hoc|university|hoc vien/.test(t)?68:/cao dang|trung cap|college/.test(t)?45:/thpt|trung hoc|high school|thcs/.test(t)?25:null;
+   set('education',level,'cao',all.slice(0,2).map(s=>({text:snippet(s.values.join(' · ')),why:src(s)})));}
+  {const live=pick(/^(song tai|tinh\/thanh pho hien tai|thanh pho hien tai|current city|dia chi|vi tri)$/),home=pick(/^(que quan|hometown)$/),s=live||home;const v=s?s.values.join(' '):'';
+   const score=!s?null:hits(v,ABROAD).length||hits(v,BIG_CITY).length?92:hits(v,CITY).length?75:hits(v,RURAL).length?25:48;
+   set('urban',score,live?'cao':'thấp',s?[{text:v,why:src(s)+(live?'':' (quê quán, không phải nơi đang sống)')}]:[]);}
+  {const r=pick(/^(moi quan he|tinh trang moi quan he|relationship|tinh trang hon nhan)$/);const rv=r?fold(r.values.join(' ')):'';
+   let score=/da ket hon|married/.test(rv)?70:/dinh hon|engaged/.test(rv)?50:/hen ho|in a relationship/.test(rv)?38:/doc than|single/.test(rv)?12:null;const ev=r?[{text:r.values.join(' '),why:src(r)}]:[];
+   const kids=posts.filter(p=>hits(p.text,KID).length);if(kids.length){score=Math.max(score??0,kids.length>=2?90:84);ev.unshift({text:snippet(kids[0].text),why:'bài về con: '+hits(kids[0].text,KID).map(x=>x.w).join(', ')});}
+   set('family',score,kids.length>=2||r?'trung bình':'thấp',ev.slice(0,3));}
+  return out;
  }
- function scoreAxes(input){
-  const posts=(input.posts||[]).filter(p=>p&&String(p.text||p.media||'').trim()!==''||p?.ageDays!=null);
-  const usable=posts.filter(p=>!sensitive(p.text));
-  const aboutText=(input.about||[]).flatMap(t=>t.sections||[]).map(s=>s.title+': '+s.values.join(' · ')).join(' | ');
-  const product=String(input.productKeywords||'').split(/[,;\n]+/).map(s=>s.trim()).filter(s=>s.length>=2).slice(0,30);const productCues=words(product.map(s=>[s,2.5]));
-  const out={};
-  for(const axis of AXES){
-   let score=null,ev=[],n=0,note='';
-   if(axis.id==='influence'){
-    const f=input.header?.followers??null,reacts=usable.map(p=>p.reactions).filter(Number.isFinite),avg=reacts.length?reacts.reduce((a,b)=>a+b,0)/reacts.length:null;
-    if(f!=null||avg!=null){const fs=f!=null?clamp((Math.log10(Math.max(f,1))-2)*25):null,es=avg!=null?clamp((Math.log10(Math.max(avg,1)))*30):null;score=fs!=null&&es!=null?clamp(fs*0.6+es*0.4):fs??es;
-     if(f!=null)ev.push({post:-1,text:f.toLocaleString('vi-VN')+' người theo dõi',why:'số người theo dõi',weight:fs});if(avg!=null)ev.push({post:-1,text:'Trung bình '+Math.round(avg).toLocaleString('vi-VN')+' cảm xúc/bài ('+reacts.length+' bài)',why:'tương tác',weight:es});n=ev.length;}
-   }else if(axis.id==='activity'){
-    const ages=posts.map(p=>p.ageDays).filter(Number.isFinite);
-    if(ages.length){const last=Math.min(...ages),month=ages.filter(d=>d<=30).length;score=clamp(Math.max(0,100-last*1.2)*0.5+Math.min(month,12)/12*100*0.5);
-     ev.push({post:-1,text:'Bài gần nhất: '+(last<1?'hôm nay':last+' ngày trước'),why:'độ mới',weight:last},{post:-1,text:month+' bài trong 30 ngày (trên '+ages.length+' bài đã đọc)',why:'tần suất',weight:month});n=2;}
-   }else{
-    const r=keywordAxis(axis,usable,axis.id==='need_urgency'?productCues:[],axis.id==='spending_power'||axis.id==='depth_need'?aboutText:'');n=r.n;ev=r.evidence;
-    if(axis.id==='depth_need'&&usable.length){const lens=usable.map(p=>String(p.text||'').length),avg=lens.reduce((a,b)=>a+b,0)/lens.length,q=usable.filter(p=>/\?/.test(p.text||'')).length;
-     r.pos+=Math.max(0,(avg-150)/150)+q*0.3;ev.push({post:-1,text:'Độ dài bài trung bình '+Math.round(avg)+' ký tự; '+q+' bài có câu hỏi',why:'cách viết',weight:+(Math.max(0,(avg-150)/150)+q*0.3).toFixed(2)});n++;
-     if(/dai hoc|thac si|tien si|cao hoc|university|master/.test(fold(aboutText))){r.pos+=1.5;ev.push({post:-1,text:'Học vấn công khai: đại học trở lên',why:'học vấn',weight:1.5});n++;}}
-    // Không có bằng chứng thì không gán đại: dưới 10 bài -> "chưa đủ dữ liệu"; từ 10 bài trở lên mà không thấy dấu hiệu -> thấp (10), tin cậy thấp.
-    if(n>0){
-     if(axis.id==='spending_power'){score=clamp(50+saturate(r.pos,3)/2-saturate(r.neg,2)/2);}
-     else score=clamp(saturate(Math.max(0,r.pos-r.neg),axis.id==='depth_need'?3:4));
-    }else if(usable.length>=10&&axis.id!=='spending_power'){score=10;note='Không thấy dấu hiệu trong '+usable.length+' bài đã đọc.';}
-    else note='Không thấy dấu hiệu trong '+usable.length+' bài đã đọc; chưa đủ để kết luận.';
-   }
-   if(score==null)note=note||'Chưa đủ dữ liệu công khai.';
-   out[axis.id]={score,confidence:score==null?'không có':axis.id==='influence'||axis.id==='activity'?'cao':n?confidence(n):'thấp',evidence:ev,note};
+
+ // ===================== 2. RADAR TÍNH CÁCH =====================
+ // Nét thể hiện QUA CÁCH VIẾT trên bài công khai (không phải chẩn đoán tâm lý). 4 nét đầu là nhóm "Cá tính" của Sheet.
+ const TRAIT_AXES=[
+  {id:'naive',label:'Ngây thơ',sheet:'Ngây thơ',definition:'Hồn nhiên, dễ tin, hay hỏi đơn giản, giọng dễ thương.',low:'Viết chín chắn, ít hỏi.',high:'Nhiều "hihi/huhu/ạ", hỏi ngây ngô, emoji dễ thương.',
+   cues:words([['hihi',1.5],['hehe',1],['huhu',1.5],['dễ thương',1.5],['cute',1.5],['xinh quá',1],['có ai biết',1],['thật không',1],['ngại quá',1],['ui',1],['nè',0.7],['nha',0.4],['ạ',0.4]]),emoji:/[🥺🥰😊🤗💕💖🌸🐰🎀]/gu},
+  {id:'knowledgeable',label:'Hiểu biết',sheet:'Hiểu biết',definition:'Chia sẻ kiến thức, phân tích, kinh nghiệm; viết có lập luận.',low:'Ít nội dung kiến thức.',high:'Bài dài, có phân tích, số liệu, mẹo, kinh nghiệm.',
+   cues:words([['kiến thức',2],['phân tích',2],['kinh nghiệm',1.5],['nghiên cứu',2],['theo mình',1],['lưu ý',1.5],['bí quyết',1.5],['mẹo',1],['so sánh',1.5],['nguyên nhân',1.5],['giải pháp',1.5],['tại sao',1],['bởi vì',0.7],['thứ nhất',1.5],['tóm lại',1.5]])},
+  {id:'assertive',label:'Cá tính mạnh',sheet:'Cá tính mạnh',definition:'Quan điểm rõ ràng, dám nói thẳng, phản biện.',low:'Tránh tranh luận, ít nêu quan điểm.',high:'Hay khẳng định, phản bác, nói thẳng, nhiều "!!".',
+   cues:words([['quan điểm',1.5],['nói thật',1.5],['thẳng thắn',2],['không đồng ý',2],['phải nói',1.5],['vô lý',1.5],['sai',1],['dẹp',1.5],['tôi nghĩ',1],['mình nghĩ',0.7],['chắc chắn',1],['tuyệt đối',1.5],['xin lỗi nhưng',1.5]]),bang:true},
+  {id:'goofy',label:'Ngốc/Ngã cây',sheet:'Ngốc/Ngã cây',definition:'Hài hước tự trào, vụng về đáng yêu, hay đùa và "tấu hề".',low:'Nghiêm túc.',high:'Nhiều "haha/kkk/=))", kể chuyện vụng về, đùa chính mình.',
+   cues:words([['haha',1],['hahaha',1.2],['kkk',1.2],['=))',1.5],[':))',1],['toang',1.5],['quê',1],['ngáo',1.5],['tấu hề',2],['lầy',1.5],['xỉu',1],['cười xỉu',2],['ngố',1.5],['hài',1]]),emoji:/[😂🤣😆😅🙃🤡]/gu},
+  {id:'extravert',label:'Hướng ngoại',definition:'Thích gặp gỡ, đi chơi, hoạt động nhóm.',low:'Bài chủ yếu một mình, ít sự kiện.',high:'Đi chơi, tụ tập, gắn thẻ bạn bè, check-in thường xuyên.',
+   cues:words([['đi chơi',1.5],['tụ tập',2],['cả hội',2],['hội bạn',1.5],['team',1],['party',2],['gặp gỡ',1.5],['cafe',0.7],['cà phê',0.7],['offline',2],['sự kiện',1.5],['đang ở',1],['cùng với',1],['với các bạn',1.5]])},
+  {id:'expressive',label:'Bộc lộ cảm xúc',definition:'Thể hiện tâm trạng, cảm xúc cá nhân trên mạng.',low:'Ít cảm xúc, chủ yếu thông tin.',high:'Nhiều tâm trạng, emoji, dấu cảm thán.',
+   cues:words([['buồn',1.5],['vui quá',1.5],['hạnh phúc',1.5],['nhớ',1],['mệt',1],['khóc',1.5],['cô đơn',2],['tâm trạng',2],['xúc động',2],['biết ơn',1],['tủi',2]]),emoji:/\p{Extended_Pictographic}/gu,bang:true},
+  {id:'driven',label:'Cầu tiến',definition:'Quan tâm học tập, sự nghiệp, mục tiêu và tự phát triển.',low:'Ít nói về học tập, công việc.',high:'Học, thi chứng chỉ, dự án, mục tiêu, khởi nghiệp.',
+   cues:words([['học',0.7],['thi',0.7],['chứng chỉ',2],['band',1.5],['dự án',1.5],['sự nghiệp',2],['mục tiêu',2],['kpi',1.5],['cố gắng',1],['nỗ lực',1.5],['khởi nghiệp',2],['thăng tiến',2],['khóa học',1.5],['tự học',2],['phát triển bản thân',2.5]])},
+  {id:'family_care',label:'Chăm lo gia đình',definition:'Mức nhắc tới và chăm lo cho gia đình trong bài viết.',low:'Hiếm khi nhắc gia đình.',high:'Thường xuyên nói về bố mẹ, vợ/chồng, con cái.',
+   cues:words([['bố mẹ',1.5],['ba mẹ',1.5],['mẹ mình',1.5],['bố mình',1.5],['gia đình',1.5],['vợ',1],['chồng',1],['ông bà',1.5],['nhà mình',1],['về quê',1],['cả nhà',1]])}
+ ];
+ function traitAxes(input){
+  const posts=(input.posts||[]).filter(p=>p&&p.text&&!sensitive(p.text));const out={};
+  for(const a of TRAIT_AXES){
+   let pos=0;const ev=[];
+   posts.forEach(p=>{const w=recencyWeight(p.ageDays),h=hits(p.text,a.cues);let s=h.reduce((t,x)=>t+x.k,0);const why=h.map(x=>x.w);
+    if(a.emoji){const e=(p.text.match(a.emoji)||[]).length;if(e){s+=Math.min(e,6)*0.4;why.push(e+' emoji');}}
+    if(a.bang){const b=(p.text.match(/!{2,}/g)||[]).length;if(b){s+=b*0.6;why.push('"!!" ×'+b);}}
+    if(a.id==='knowledgeable'&&p.text.length>600){s+=1.5;why.push('bài dài '+p.text.length+' ký tự');}
+    if(s>0){pos+=s*w;ev.push({text:snippet(p.text),why:why.join(', '),weight:+(s*w).toFixed(2)});}});
+   ev.sort((x,y)=>y.weight-x.weight);const n=ev.length;
+   const score=n?clamp(saturate(pos/Math.max(1,Math.sqrt(posts.length/5)),4)):posts.length>=10?10:null;
+   out[a.id]={score,confidence:score==null?'không có':n>=4?'cao':n>=2?'trung bình':'thấp',evidence:ev.slice(0,4).map(({text,why})=>({text,why})),
+    note:score==null?'Chưa đủ bài viết công khai (cần ít nhất 1 bài có dấu hiệu, hoặc 10 bài để kết luận "thấp").':n?'':'Không thấy dấu hiệu trong '+posts.length+' bài.'};
   }
   return out;
  }
- // Nhân khẩu: chỉ lấy từ thông tin công khai, ghi rõ nguồn. Ước tính (vd. tuổi theo năm tốt nghiệp) được đánh dấu là ước tính.
- function demographics(input,now=new Date()){
-  const secs=(input.about||[]).flatMap(t=>(t.sections||[]).map(s=>({tab:t.tab,...s})));
-  const pick=re=>secs.find(s=>re.test(fold(s.title)));
-  const rows=[];const add=(key,label,value,source,estimate=false)=>{if(value)rows.push({key,label,value:String(value).slice(0,200),source,estimate});};
-  const g=pick(/^(gioi tinh|gender)$/);add('gender','Giới tính',g?.values[0],'Giới thiệu › '+(g?.tab||''));
-  const b=pick(/^(ngay sinh|sinh nhat|birthday|nam sinh|birth year)$/);
-  if(b){const y=(b.values.join(' ').match(/(19|20)\d{2}/)||[])[0];add('age','Tuổi',y?(now.getFullYear()-Number(y))+' tuổi (sinh năm '+y+')':b.values[0],'Giới thiệu › '+(b.tab||''));}
-  else{const hs=secs.find(s=>/trung hoc|high school/.test(fold(s.title))&&/tot nghiep nam (\d{4})|class of (\d{4})/.test(fold(s.values.join(' '))));
-   if(hs){const y=Number((fold(hs.values.join(' ')).match(/tot nghiep nam (\d{4})|class of (\d{4})/)||[]).slice(1).find(Boolean));if(y>1950&&y<=now.getFullYear()+1)add('age','Tuổi','khoảng '+(now.getFullYear()-y+18)+' (ước tính theo năm tốt nghiệp THPT '+y+')','Giới thiệu › '+(hs.tab||''),true);}}
-  const live=pick(/^(song tai|tinh\/thanh pho hien tai|thanh pho hien tai|current city|dia chi|vi tri)$/);add('lives','Sống tại',live?.values[0],'Giới thiệu › '+(live?.tab||''));
-  const home=pick(/^(que quan|hometown)$/);add('hometown','Quê quán',home?.values[0],'Giới thiệu › '+(home?.tab||''));
-  const work=pick(/^(cong viec|work|noi lam viec)$/);add('work','Công việc',work?.values[0],'Giới thiệu › '+(work?.tab||''));
-  const edu=pick(/^(dai hoc|cao hoc|university|college|truong dai hoc)$/)||pick(/^(trung hoc|truong trung hoc|high school)$/);add('education','Học vấn',edu?.values[0],'Giới thiệu › '+(edu?.tab||''));
-  const rel=pick(/^(moi quan he|tinh trang moi quan he|relationship)$/);add('relationship','Tình trạng quan hệ',rel?.values[0],'Giới thiệu › '+(rel?.tab||''));
-  const cat=pick(/^(hang muc|category)$/);add('category','Hạng mục',cat?.values.join(', '),'Giới thiệu › '+(cat?.tab||''));
-  if(input.header?.followers!=null)add('followers','Người theo dõi',input.header.followers.toLocaleString('vi-VN'),'Đầu trang cá nhân');
-  if(input.header?.friends!=null)add('friends','Bạn bè',input.header.friends.toLocaleString('vi-VN'),'Đầu trang cá nhân');
+
+ // ===================== 3. RADAR MUA HÀNG (agent khác) =====================
+ // Định dạng nạp: {schema:'desk.customer-buying/1', url:'<trang của khách>', axes:[{id,label,score:0..100|null,confidence?,evidence?:[{text,why}]}], source, at}
+ // 1–12 trục; url phải trùng hồ sơ; bằng chứng tối đa 5/trục; link trong bằng chứng bị thay bằng [link] (không giữ danh tính bên thứ ba).
+ const normUrl=u=>{try{const x=new URL(u);const id=x.searchParams.get('id');return x.pathname==='/profile.php'&&id?'id:'+id:x.pathname.replace(/\/+$/,'').toLowerCase();}catch{return '';}};
+ function mergeBuying(profile,payload){
+  if(payload?.schema!==BUYING_SCHEMA)throw Error('Sai định dạng kết quả mua hàng (cần '+BUYING_SCHEMA+').');
+  if(!normUrl(payload.url)||normUrl(payload.url)!==normUrl(profile.url))throw Error('Kết quả mua hàng thuộc trang khác, không khớp hồ sơ này.');
+  if(!Array.isArray(payload.axes)||!payload.axes.length||payload.axes.length>12)throw Error('Cần từ 1 đến 12 trục mua hàng.');
+  const ids=new Set;const axes=payload.axes.map(a=>{
+   const id=String(a?.id||'');if(!/^[a-z][a-z0-9_]{1,40}$/.test(id)||ids.has(id))throw Error('Mã trục không hợp lệ hoặc trùng: '+id);ids.add(id);
+   if(DEMO_AXES.some(x=>x.id===id)||TRAIT_AXES.some(x=>x.id===id))throw Error('Mã trục trùng với trục nhân khẩu/tính cách: '+id);
+   const score=a.score==null?null:Number(a.score);if(score!=null&&!(score>=0&&score<=100))throw Error('Điểm trục '+id+' phải từ 0 đến 100.');
+   return {id,label:String(a.label||id).slice(0,40),score:score==null?null:clamp(score),confidence:String(a.confidence||'').slice(0,20),definition:String(a.definition||'').slice(0,300),
+    evidence:(a.evidence||[]).slice(0,5).map(e=>({text:snippet(String(e?.text||'').replace(/https?:\/\/\S+/g,'[link]')),why:String(e?.why||'').slice(0,120)}))};});
+  return {...profile,buying:{axes,source:String(payload.source||'').slice(0,80),at:String(payload.at||new Date().toISOString()).slice(0,40)}};
+ }
+
+ // ===================== GHÉP PERSONA =====================
+ const bandOf=(axis,score)=>score==null?null:(axis.bands||[]).find(([lo,hi])=>score>=lo&&score<=hi)||null;
+ function axisValue(profile,id){const m=profile.manual?.[id];if(m&&Number.isFinite(m.score))return {score:m.score,manual:true};const a=profile.demographic?.[id]??profile.personality?.[id]??profile.buying?.axes?.find(x=>x.id===id);return {score:a?.score??null,manual:false};}
+ function sheetGroups(profile){
+  const v=id=>axisValue(profile,id).score;const g=[];
+  for(const a of DEMO_AXES.filter(a=>a.sheet)){const b=bandOf(a,v(a.id));g.push({group:a.sheet,value:b?b[2]:null});}
+  const traits=TRAIT_AXES.filter(a=>a.sheet).map(a=>({a,s:v(a.id)})).filter(x=>x.s!=null).sort((x,y)=>y.s-x.s);
+  const top=traits[0],tie=top&&traits[1]&&top.s-traits[1].s<5;
+  g.push({group:'Cá tính',value:top&&top.s>=40&&!tie?top.a.sheet:null,note:top&&top.s>=40&&tie?'Hai nét gần bằng nhau: '+top.a.sheet+' / '+traits[1].a.sheet:''});
+  return g;
+ }
+ function persona(profile){
+  const v=id=>axisValue(profile,id).score;
+  const demo=DEMO_AXES.map(a=>({a,b:bandOf(a,v(a.id))})).filter(x=>x.b).map(x=>x.a.label+': '+x.b[2]);
+  const traits=TRAIT_AXES.map(a=>({a,s:v(a.id)})).filter(x=>x.s!=null).sort((x,y)=>y.s-x.s);
+  const strong=traits.filter(x=>x.s>=55).slice(0,3).map(x=>x.a.label),weak=traits.filter(x=>x.s<=20).slice(-2).map(x=>x.a.label);
+  const buy=(profile.buying?.axes||[]).filter(x=>axisValue(profile,x.id).score!=null).map(x=>({x,s:axisValue(profile,x.id).score})).sort((p,q)=>q.s-p.s);
+  const missing=[];if(!demo.length)missing.push('nhân khẩu');if(!traits.length)missing.push('tính cách');if(!profile.buying)missing.push('8 trục mua hàng (agent khác)');
+  return {complete:!missing.length,missing,groups:sheetGroups(profile),demographic:demo,strongTraits:strong,weakTraits:weak,
+   buyingHigh:buy.filter(b=>b.s>=60).slice(0,3).map(b=>b.x.label+' ('+b.s+')'),buyingLow:buy.filter(b=>b.s<=30).slice(-2).map(b=>b.x.label+' ('+b.s+')')};
+ }
+ function facts(input){
+  const secs=secsOf(input.about),rows=[];const add=(label,re)=>{const s=secs.find(x=>re.test(fold(x.title)));if(s)rows.push({label,value:snippet(s.values.join(' · '),200),source:'Giới thiệu › '+s.tab});};
+  add('Giới tính',/^(gioi tinh|gender)$/);add('Sống tại',/^(song tai|tinh\/thanh pho hien tai|current city|dia chi)$/);add('Quê quán',/^(que quan|hometown)$/);add('Công việc',/^(cong viec|work)$/);add('Học vấn',/^(dai hoc|cao hoc|university|truong dai hoc)$/);add('Hạng mục',/^(hang muc|category)$/);
+  if(input.header?.followers!=null)rows.push({label:'Người theo dõi',value:input.header.followers.toLocaleString('vi-VN'),source:'Đầu trang'});
   return rows;
  }
  function buildProfile(input,now=new Date()){
   if(!input?.url)throw Error('Thiếu link trang cá nhân.');
-  return {schema:SCHEMA,id:input.id||crypto.randomUUID(),url:input.url,name:String(input.name||'').slice(0,120),analyzedAt:now.toISOString(),
-   postsRead:(input.posts||[]).length,productKeywords:String(input.productKeywords||'').slice(0,300),
-   demographics:demographics(input,now),axes:scoreAxes(input),manual:{},notes:'',external:input.external||{}};
+  return {schema:SCHEMA,id:input.id||crypto.randomUUID(),url:input.url,name:String(input.name||'').slice(0,120),analyzedAt:now.toISOString(),postsRead:(input.posts||[]).length,
+   facts:facts(input),demographic:demographicAxes(input,now),personality:traitAxes(input),buying:input.buying||null,manual:{},notes:''};
  }
- // Agent trục 8 nạp kết quả theo định dạng: {schema:'desk.customer-axis/1', axis:'competitor_exposure', url, score:0..100|null,
- // evidence:[{text,why}], source, at}. url phải trùng hồ sơ. Không nhận danh tính bên thứ ba (tên/link tài khoản khác).
- function mergeExternal(profile,payload){
-  if(payload?.schema!=='desk.customer-axis/1')throw Error('Sai định dạng trục ngoài (cần desk.customer-axis/1).');
-  const def=EXTERNAL_AXES.find(a=>a.id===payload.axis);if(!def)throw Error('Trục ngoài không được khai báo: '+payload.axis);
-  const norm=u=>{try{const x=new URL(u);const id=x.searchParams.get('id');return x.pathname==='/profile.php'&&id?'id:'+id:x.pathname.replace(/\/+$/,'').toLowerCase();}catch{return '';}};
-  if(!norm(payload.url)||norm(payload.url)!==norm(profile.url))throw Error('Kết quả trục ngoài thuộc trang khác.');
-  const score=payload.score==null?null:Number(payload.score);if(score!=null&&!(score>=0&&score<=100))throw Error('Điểm trục ngoài phải từ 0 đến 100.');
-  const evidence=(payload.evidence||[]).slice(0,10).map(e=>({text:snippet(String(e.text||'').replace(/https?:\/\/\S+/g,'[link]')),why:String(e.why||'').slice(0,120)}));
-  return {...profile,external:{...profile.external,[def.id]:{score:score==null?null:clamp(score),evidence,source:String(payload.source||'').slice(0,80),at:String(payload.at||new Date().toISOString()).slice(0,40)}}};
- }
- // Giá trị hiển thị: chỉnh tay (nếu có) ưu tiên hơn điểm tự động; giữ nguyên điểm tự động để đối chiếu.
- function axisValue(profile,id){const m=profile.manual?.[id];if(m&&Number.isFinite(m.score))return {score:m.score,manual:true};const a=profile.axes?.[id]??profile.external?.[id];return {score:a?.score??null,manual:false};}
- return {SCHEMA,AXES,EXTERNAL_AXES,fold,count,sensitive,scoreAxes,demographics,buildProfile,mergeExternal,axisValue};
+ return {SCHEMA,BUYING_SCHEMA,DEMO_AXES,TRAIT_AXES,fold,count,sensitive,demographicAxes,traitAxes,mergeBuying,sheetGroups,persona,bandOf,facts,buildProfile,axisValue};
 })();

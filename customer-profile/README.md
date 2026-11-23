@@ -1,55 +1,58 @@
 # Hồ sơ khách hàng (extension riêng, 0.1.0)
 
-Dựng **hồ sơ nhân khẩu + bản đồ tính cách/mua hàng** của một khách **đã liên hệ bạn**, từ trang cá nhân **công khai** của họ. Chỉ đọc: không bấm thích, theo dõi, kết bạn, nhắn tin hay bình luận. Dữ liệu lưu trong Chrome Profile (`chrome.storage.local`, khóa `customerProfiles`), không gửi đi đâu.
+Dựng **persona** của một khách **đã liên hệ bạn** từ trang cá nhân **công khai** của họ:
 
-Tách riêng khỏi Post Research và FB Desk (không dùng chung mã chạy); hàm đọc trang Giới thiệu được chép từ Post Research.
+**Persona = Radar Nhân khẩu + Radar Tính cách (extension này) + Radar 8 trục mua hàng (agent khác làm, nạp bằng JSON).**
 
-## Cài
+Chỉ đọc: không bấm thích, theo dõi, kết bạn, nhắn tin hay bình luận. Dữ liệu lưu trong Chrome Profile (`chrome.storage.local`, khóa `customerProfiles`), không gửi đi đâu. Không phụ thuộc FB Desk hay Post Research.
 
-`chrome://extensions` → bật Chế độ nhà phát triển → **Tải tiện ích đã giải nén** → chọn thư mục `customer-profile`. Manifest có `key` nên ID cố định ở mọi thư mục/máy. Bấm biểu tượng extension để mở trang.
+## Mốc chuẩn khái niệm
 
-## Dùng
+**[KHAI-NIEM.md](KHAI-NIEM.md)** định nghĩa mọi khái niệm (Sinh viên, Trung niên, Dân VP, VIP, Cá tính mạnh, Ngốc/Ngã cây…): định nghĩa, dấu hiệu nhận biết, ví dụ, không nhầm với, mốc điểm. Người và agent dùng tệp này làm chuẩn khi phân loại. Trên giao diện, nút **?** cạnh mỗi trục/mức hiện đúng định nghĩa đó.
 
-1. Dán link trang cá nhân của khách (`facebook.com/ten` hoặc `profile.php?id=…`), thêm từ khóa sản phẩm/dịch vụ của bạn (giúp chấm "Mức cần gấp"), bấm **Phân tích**. Extension mở trang trong một tab đang hiện (dòng thời gian chỉ tải khi tab hiện), đọc đầu trang, tối đa 25 bài công khai gần nhất và mọi tab con của trang Giới thiệu, rồi đóng tab.
-2. Kiểm tra, chỉnh tay nếu cần (kéo thanh; ↺ về điểm tự động), ghi chú, **Lưu hồ sơ**.
+Nguồn duy nhất là `concepts.js`. Sửa định nghĩa ở đó rồi chạy `node customer-profile/build-glossary.mjs` để sinh lại KHAI-NIEM.md (test sẽ báo nếu hai bên lệch).
 
-## Nhân khẩu
+## Cài và dùng
 
-Chỉ lấy từ trang Giới thiệu và đầu trang; mỗi mục ghi nguồn. Không có thì không hiện (không đoán). Tuổi chỉ khi công khai ngày/năm sinh; nếu chỉ có năm tốt nghiệp THPT thì hiện "khoảng N (ước tính …)" và đánh dấu **ước tính**.
+`chrome://extensions` → Chế độ nhà phát triển → **Tải tiện ích đã giải nén** → chọn thư mục này (ID cố định `agcbcbcjlealoknmffnhedpmlibpbbpa`). Bấm biểu tượng extension, dán link trang cá nhân của khách, bấm **Phân tích**. Extension mở trang trong tab đang hiện, đọc đầu trang, tối đa 25 bài công khai gần nhất và mọi tab của trang Giới thiệu, rồi đóng tab. Kiểm tra, chỉnh tay nếu cần, **Lưu hồ sơ**.
 
-## 7 trục (0–100)
+## Radar 1: Nhân khẩu (6 thang đo)
 
-| Trục | Định nghĩa | Nguồn điểm |
-|---|---|---|
-| Mức cần gấp | Đang chủ động tìm/hỏi/so sánh sản phẩm, dịch vụ gần đây | từ khóa tìm mua + từ khóa sản phẩm của bạn, ưu tiên bài mới |
-| Khả năng chi trả | Dấu hiệu chi tiêu công khai: công việc, du lịch, đồ dùng | từ khóa (có cả chiều ngược: tìm việc, hết tiền) + Giới thiệu |
-| Nhạy cảm giá | Quan tâm giá, khuyến mãi, so giá | từ khóa |
-| Mức hoài nghi | Cần bằng chứng/review, cảnh giác, từng bị lừa | từ khóa |
-| Cần tư vấn sâu | Muốn hiểu kỹ, hỏi chi tiết, viết dài | từ khóa + độ dài bài + câu hỏi + học vấn |
-| Mức ảnh hưởng | Người theo dõi và tương tác trên bài | số liệu |
-| Độ hoạt động | Đăng gần đây và đều đặn đến đâu | ngày đăng |
+Tuổi, Thu nhập, Đẳng cấp (khớp nhóm của Sheet "Nhân cách"), Học vấn, Đô thị, Giai đoạn gia đình. Mỗi trục là một thang 0–100 chia mức; mức hiện ngay cạnh tên trục. Chỉ từ thông tin công khai; suy luận gián tiếp được đánh dấu ước tính, độ tin cậy thấp.
 
-Mỗi trục có **độ tin cậy** và **bằng chứng** (trích bài và từ khóa khớp). Không có bằng chứng: "chưa đủ dữ liệu" (đọc ≥ 10 bài mà không thấy dấu hiệu thì cho 10, tin cậy thấp). Bài về chủ đề nhạy cảm (sức khỏe, tôn giáo, chính trị, xu hướng tính dục) **không được dùng làm bằng chứng**. So khớp giữ dấu tiếng Việt (bỏ dấu làm "đang" trùng "đảng", "lừa đảo" chứa "đạo"); chỉ so bản bỏ dấu khi người viết gõ không dấu.
+## Radar 2: Tính cách (8 nét)
 
-## Trục 8 "Đã bị đối thủ tiếp cận": do agent khác làm
+Ngây thơ, Hiểu biết, Cá tính mạnh, Ngốc/Ngã cây (4 nét của Sheet), Hướng ngoại, Bộc lộ cảm xúc, Cầu tiến, Chăm lo gia đình. Chấm theo cách viết trên bài công khai, có bằng chứng; không phải chẩn đoán tâm lý.
 
-Đã khai báo sẵn (`EXTERNAL_AXES`, id `competitor_exposure`), hiện "chưa có" trên biểu đồ tới khi nạp. Nạp bằng nút **Nạp trục 8 (JSON)** hoặc gọi `customerModel.mergeExternal(profile, payload)`:
+## Radar 3: 8 trục mua hàng (agent khác)
+
+Extension này **không chấm** các trục mua hàng. Agent phụ trách xuất JSON, người dùng bấm **Nạp 8 trục mua hàng (JSON)**:
 
 ```json
 {
-  "schema": "desk.customer-axis/1",
-  "axis": "competitor_exposure",
+  "schema": "desk.customer-buying/1",
   "url": "https://www.facebook.com/<trang cá nhân của khách>",
-  "score": 0,
-  "evidence": [{"text": "mô tả ngắn, vd. 5/20 bài có bình luận chào hàng", "why": "lý do"}],
   "source": "tên agent/công cụ",
-  "at": "2026-11-23T10:00:00+07:00"
+  "at": "2026-11-23T10:00:00+07:00",
+  "axes": [
+    {"id": "need_urgency", "label": "Mức cần gấp", "score": 82, "confidence": "trung bình",
+     "definition": "định nghĩa trục (hiện ở nút ?)",
+     "evidence": [{"text": "mô tả ngắn", "why": "lý do"}]}
+  ]
 }
 ```
 
-- `url` phải trùng trang của hồ sơ; `score` 0–100 hoặc `null`; tối đa 10 bằng chứng.
-- **Không gửi danh tính bên thứ ba** (tên, link tài khoản bán hàng khác): link trong `text` bị thay bằng `[link]`.
+- 1–12 trục; `id` chữ thường/số/gạch dưới, không trùng nhau và không trùng trục nhân khẩu/tính cách; `score` 0–100 hoặc `null`.
+- `url` phải trùng trang của hồ sơ; tối đa 5 bằng chứng/trục; link trong bằng chứng bị thay bằng `[link]` (không giữ danh tính bên thứ ba).
+
+## Persona và xếp nhóm Sheet
+
+Thẻ Persona ghép: nhóm theo Sheet (Tuổi / Thu nhập / Đẳng cấp / Cá tính), các mức nhân khẩu, nét tính cách nổi bật, trục mua hàng cao/thấp; thiếu phần nào thì ghi rõ. Quy tắc xếp nhóm Sheet: xem cuối KHAI-NIEM.md. Xuất JSON kèm persona để agent khác đọc.
+
+## Nguyên tắc
+
+Chỉ thông tin công khai của khách đã liên hệ; mỗi điểm có bằng chứng; thiếu dữ liệu thì "chưa đủ dữ liệu", không gán đại. Bài về sức khỏe, tôn giáo, chính trị, xu hướng tính dục không được dùng làm bằng chứng. So khớp giữ dấu tiếng Việt ("đang" ≠ "đảng").
 
 ## Test
 
-`node tests/customer-profile.mjs`. Phần đọc bài viết, số cảm xúc, ngày đăng và trang Giới thiệu đã chạy trên trang công khai thật (Nguyễn Yến, 23 Dota TV); **chưa chạy trọn luồng trong extension đã cài**.
+`node tests/customer-profile.mjs`. Phần đọc bài viết, số cảm xúc, ngày đăng và trang Giới thiệu đã chạy trên trang công khai thật; **chưa chạy trọn luồng trong extension đã cài**.
