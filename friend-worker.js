@@ -131,6 +131,33 @@ export function makeFriends(commentAI){
  d.stage='Chờ tự kiểm tra lại · '+e.message;});}finally{working=false;await sync();}
  }
  async function handle(m,sender){
+ let poolUid='';
+ if(['friends-pool-publish','friends-pool-status','friends-pool-poll'].includes(m.type)){
+  const d=await read();
+  if(m.type==='friends-pool-publish'){
+   const result=await sendSheet(d.config,{pool:'publish',uids:m.uids});
+   if(!result.plan)throw Error('Cập nhật SheetLog.gs trên Web app.');
+   return result;
+  }
+  if(m.type==='friends-pool-status')return sendSheet(d.config,{pool:'status'});
+  const {deskPersonaBinding:binding}=await chrome.storage.local.get('deskPersonaBinding');
+  if(!binding?.uid||!d.config.key||d.pausedByUser)return;
+  const {plan}=await sendSheet(d.config,{pool:'poll'});
+  if(!plan?.uids.includes(binding.uid))return;
+  const rows=d.rows.filter(r=>r.internalClones&&accountUID(r.actor.url)===binding.uid&&plan.uids.includes(r.target.id));
+  if(d.poolId===plan.id||d.active||d.enabled||d.scan){
+   const message='Đã là bạn '+rows.filter(r=>r.state==='accepted').length+' / '+(plan.uids.length-1)+' · đã gửi '+rows.filter(r=>r.state==='sent').length+' · đang chờ '+rows.filter(r=>r.state==='queued').length;
+   const reportKey=[plan.id,binding.uid,message].join(':');
+   if(reportKey!==d.poolReport){
+    await sendSheet(d.config,{pool:'report',id:plan.id,uid:binding.uid,message});
+    await change(state=>{state.poolReport=reportKey;});
+   }
+   return;
+  }
+  poolUid=binding.uid;
+  m={type:'friends-start-clones',poolId:plan.id,uids:plan.uids};
+ }
+ const poolId=m.poolId;
  const internalStart=m.type==='friends-start-clones',internalScan=m.type==='friends-scan-clones';
  if(['friends-guard','friends-progress','friends-permit','friends-comment','friends-photo'].includes(m.type)){
  const check=d=>{const r=activeRow(d);if(!r||r.token!==m.token||r.tab!==sender.tab?.id||(!d.enabled&&!(d.scan&&r.internalClones))||(r.internalClones?r.internalActionAt:r.sentAt))throw Error('Lượt kết bạn đã dừng.');return r;};
@@ -179,17 +206,22 @@ export function makeFriends(commentAI){
  if(m.type==='friends-start-clones'){
   const registry=validateRegistry((await chrome.storage.local.get('deskPersonas')).deskPersonas),actor=await actorNow(),uid=accountUID(actor.url),current=registry.profiles.find(p=>p.uid===uid&&readiness(p).ready);
   if(!current)throw Error('UID hiện tại chưa khớp một clone đủ hồ sơ trong Sheet.');
-  const peers=registry.profiles.filter(p=>p.id!==current.id&&readiness(p).ready);
+  if(poolUid&&poolUid!==uid)throw Error('UID đăng nhập khác UID nhận việc.');
+  const peers=m.uids?m.uids.filter(id=>id!==uid).map(uid=>({uid})):registry.profiles.filter(p=>p.id!==current.id&&readiness(p).ready);
   if(!peers.length)throw Error('Chưa có clone khác đủ UID để kết bạn nội bộ.');
   m={type:'friends-start',source:'',manual:peers.map(p=>p.uid).join('\n'),warm:'none',count:peers.length,daily:10,internalClones:true};
  }
  if(m.type==='friends-start'){
  const plan=checkSettings(m),manual=parseTargets(m.manual),source=await sourceTargets(m.source,plan.count),actor=await actorNow();
+ if(poolUid&&accountUID(actor.url)!==poolUid)throw Error('Nick đăng nhập đã đổi.');
  const targets=[...new Map([...manual,...source].map(t=>[t.id,t])).values()].filter(t=>t.id!==targetOf(actor.url)?.id);
- await change(d=>{if(d.active||d.scan||d.enabled)throw Error('Dừng lượt hiện tại trước khi lập danh sách mới.');
+ await change(d=>{if(poolId&&(d.pausedByUser||d.poolId===poolId))return;
+ if(d.active||d.scan||d.enabled)throw Error('Dừng lượt hiện tại trước khi lập danh sách mới.');
  const history=rowsFor(d,actor),seen=new Set(history.map(r=>r.target.id));const added=targets.filter(t=>!seen.has(t.id)).slice(0,plan.count);
+ if(poolId&&!added.length){d.poolId=poolId;return;}
  if(!added.length)throw Error('Không có UID/link profile mới hợp lệ.');
  if(history.some(r=>r.state==='queued'))throw Error('Còn hàng chờ của nick này. Bấm Tiếp tục để hoàn tất.');
+ if(poolId)d.poolId=poolId;
  d.pausedByUser=false;delete d.actorRetryAt;d.source=m.source;d.actor=actor;d.plan=plan;d.campaign=crypto.randomUUID();d.enabled=true;d.stage='Đã xếp '+added.length+' người';d.next=Math.max(0,...history.filter(r=>r.sentAt).map(r=>r.sentAt+86400000/dailyLimit(plan,history)));
  for(const target of added){const r={id:crypto.randomUUID(),campaign:d.campaign,actor,target,name:target.name||'',warm:plan.warm,internalClones:internalStart,state:'queued',stage:'Đang chờ'};touch(r);d.rows.push(r);}
  });void tick();return;}

@@ -15,6 +15,21 @@ function doPost(e) {
     if(!data.key || data.key!==props.getProperty('friendKey') || data.sheet!==props.getProperty('friendSheet')) throw Error('Sai khóa hoặc file Google Sheet.');
     const book=SpreadsheetApp.openById(data.sheet);
     if(data.ping)return reply({ok:true});
+    if(data.pool){
+      lock=LockService.getScriptLock();lock.waitLock(20000);
+      let plan=JSON.parse(props.getProperty('poolPlan')||'null');
+      if(data.pool==='publish'){
+        const uids=data.uids;
+        if(!Array.isArray(uids)||uids.length<2||uids.length>100||new Set(uids).size!==uids.length||uids.some(v=>typeof v!=='string'||!/^\d{5,25}$/.test(v)))throw Error('Chọn từ 2 đến 100 UID khác nhau.');
+        plan={id:Utilities.getUuid(),uids};props.setProperty('poolPlan',JSON.stringify(plan));
+      }
+      if(data.pool==='report'&&plan&&data.id===plan.id&&plan.uids.includes(data.uid)){
+        props.setProperty('pool:'+data.uid,JSON.stringify({id:plan.id,message:String(data.message).slice(0,240)}));
+      }
+      const reports={};
+      if(data.pool==='status'&&plan){const all=props.getProperties();for(const uid of plan.uids){const r=JSON.parse(all['pool:'+uid]||'null');if(r&&r.id===plan.id)reports[uid]=r.message;}}
+      return reply({ok:true,plan,reports});
+    }
     const actor=data.actor;
     if(!actor||!/^https:\/\/www\.facebook\.com\//.test(actor.url)||!actor.name||!Array.isArray(data.rows)||data.rows.length>40)throw Error('Dữ liệu log không hợp lệ.');
     lock=LockService.getScriptLock();lock.waitLock(20000);

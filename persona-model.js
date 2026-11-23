@@ -34,6 +34,7 @@ export function validateRegistry(input){
   const q={id:text(p.id,80),alias:text(p.alias,80),name:text(p.name,120),uid,role:p.role,gender:p.gender||'unspecified',enabled:p.enabled!==false,
    status:text(p.status,500),personality:text(p.personality,1500),tone:text(p.tone,1000),self:text(p.self,40),other:text(p.other,40),bio:text(p.bio,3000),memory:text(p.memory,6000),rules:text(p.rules,2000)};
   q.concept=Object.fromEntries(Object.entries(CONCEPTS).map(([group,choices])=>{const selected=p.concept?.[group]??[];if(!Array.isArray(selected)||selected.some(v=>!choices.includes(v)))throw Error('Nhóm concept không hợp lệ: '+group);return [group,[...new Set(selected)]];}));
+  if(p.workArea)q.workArea=text(p.workArea,120);
   if(p.source)q.source={spreadsheetId:text(p.source.spreadsheetId,100),sheetName:text(p.source.sheetName,100),row:Number.isInteger(p.source.row)?p.source.row:0,originalName:text(p.source.originalName,120),originalUrl:text(p.source.originalUrl,500),docsUrl:text(p.source.docsUrl,500),notes:text(p.source.notes,1000)};
   if(!/^[\w-]{1,80}$/.test(q.id)||!q.alias)throw Error('Nhân vật cần mã ổn định và tên gọi riêng, ví dụ Bạn nam 1.');return q;
  });
