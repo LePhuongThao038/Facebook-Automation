@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Hồ sơ khách hàng",
+  "version": "0.1.0",
+  "description": "Đọc trang cá nhân CÔNG KHAI của khách đã liên hệ, dựng hồ sơ nhân khẩu và bản đồ tính cách/mua hàng. Chỉ đọc, không tương tác.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3M6VrMX4/YKC7VeWsHcsRFvlj7Kevmv0cILtEoIWBrsFMV3LIyeke41j+rqgkDkoTT6+Tkxw8+XP9s6w4+pr6JeOGtRKXIx+44+6ewUPHTH8PTGBlb01ML/mYrxhnXgthcp0+i/xlRvdYjjCbUc05/xQIg61Pc0c1qklbLbgB7D64YfLOaOJreveslUFMgZuaCMe6g5WUX8xhixVYwLVDtdK6ODjdwZ5FGjZW3LWFB/YO1EkMb7hjXmVFDF8VHIDJzuSVKKpYNGqvQlbbG7yVqCkHg3KY5EP1/sf/rclN9ESEvs1YLe3fiqB7PqLwEw0PW+Su0t5JED4KntY8NusEQIDAQAB",
+  "permissions": [
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*"
+  ],
+  "action": {
+    "default_title": "Mở Hồ sơ khách hàng"
+  },
+  "background": {
+    "service_worker": "worker.js"
+  }
+}

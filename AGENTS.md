@@ -80,6 +80,12 @@ Chi tiết: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md). Kiến trúc: [docs/FLOW.m
 
 Vùng riêng: tab **04 Đăng Story** (`story-ui.js`), dữ liệu `d.stories`, tệp trong IndexedDB `desk-story-files` (`story-files.js`), mô hình `story-model.js`, lượt chạy `kind:'story'` (nhánh riêng trong `runner.js`, các bước `story-*` trong `facebook-bot.js`, lệnh `bot-story-schedule`/`bot-story-confirm` trong `automation.js`, `story-list/add/remove/move` trong `background.js`). Dùng chung hàng chờ, giãn cách bấm, kiểm tra UID và `bot-permit` với bài viết; không đụng luồng bài viết. Chi tiết và việc cần kiểm chứng: [CHANGELOG-3.8.7.md](CHANGELOG-3.8.7.md).
 
+## Hồ sơ khách hàng (extension riêng `customer-profile/`, 0.1.0, 23/11)
+
+Dựng hồ sơ **nhân khẩu + 7 trục tính cách/mua hàng** từ trang cá nhân **công khai** của khách đã liên hệ. Chỉ đọc, không tương tác. Không phụ thuộc FB Desk hay Post Research. Chi tiết, định nghĩa trục và cách dùng: [customer-profile/README.md](customer-profile/README.md).
+
+**Trục 8 "Đã bị đối thủ tiếp cận" (`competitor_exposure`) do agent khác làm.** Đã có chỗ trống trên biểu đồ; nạp kết quả theo định dạng `desk.customer-axis/1` (đặc tả trong README, hàm `customerModel.mergeExternal`). Không đưa danh tính các tài khoản bán hàng khác vào kết quả. Không sửa 7 trục còn lại khi làm trục 8.
+
 ## Quy tắc khi sửa và đẩy mã
 
 - **Không push thẳng `main`, không `--force`.** Tạo nhánh, mở pull request.

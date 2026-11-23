@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hồ sơ khách hàng</title>
+<link rel="stylesheet" href="customer.css">
+</head>
+<body>
+<header class="top">
+ <div><small>HỒ SƠ KHÁCH HÀNG</small><h1>Bản đồ nhân khẩu &amp; tính cách</h1>
+ <p>Chỉ dùng cho khách <b>đã liên hệ</b> bạn. Chỉ đọc thông tin <b>công khai</b>, không bấm thích, theo dõi, nhắn tin hay bình luận.</p></div>
+</header>
+<div class="layout">
+ <aside class="saved">
+  <h2>Đã lưu</h2>
+  <input id="search" type="search" placeholder="Tìm theo tên…" aria-label="Tìm hồ sơ">
+  <ul id="savedList"></ul>
+  <button id="exportAll" type="button">Xuất tất cả (JSON)</button>
+ </aside>
+ <main>
+  <section class="card">
+   <label for="url">Link trang cá nhân của khách</label>
+   <div class="row"><input id="url" type="url" placeholder="https://www.facebook.com/…"><button id="analyze" class="primary" type="button">Phân tích</button></div>
+   <label for="product">Từ khóa sản phẩm/dịch vụ của bạn (giúp chấm "Mức cần gấp"; cách nhau dấu phẩy)</label>
+   <input id="product" type="text" placeholder="vd: tiếng anh, toeic, ielts">
+   <p id="status" role="status"></p>
+  </section>
+  <section id="result" class="card" hidden>
+   <div class="who"><div><h2 id="name"></h2><a id="link" target="_blank" rel="noopener noreferrer"></a><p id="meta" class="muted"></p></div>
+    <div class="actions"><button id="save" class="primary" type="button">Lưu hồ sơ</button><button id="exportOne" type="button">Xuất JSON</button><label class="file">Nạp trục 8 (JSON)<input id="importAxis" type="file" accept="application/json"></label><button id="remove" type="button">Xóa hồ sơ</button></div></div>
+   <h3>Nhân khẩu <span class="muted">(chỉ thông tin công khai; mỗi mục ghi nguồn)</span></h3>
+   <div id="demo" class="chips"></div>
+   <div class="radarWrap">
+    <canvas id="radar" width="480" height="480" aria-label="Biểu đồ mạng nhện tính cách và mua hàng"></canvas>
+    <div class="sliders"><h3>Chỉ số <span class="muted">(kéo để chỉnh tay; ↺ về điểm tự động)</span></h3><div id="sliders"></div></div>
+   </div>
+   <h3>Định nghĩa và bằng chứng từng trục</h3>
+   <div id="axes"></div>
+   <h3>Ghi chú của người tư vấn</h3>
+   <textarea id="notes" rows="3" placeholder="vd: đã hỏi giá khóa TOEIC, hẹn gọi lại thứ 6"></textarea>
+  </section>
+ </main>
+</div>
+<script src="customer-model.js"></script>
+<script src="reader.js"></script>
+<script src="customer.js"></script>
+</body>
+</html>
